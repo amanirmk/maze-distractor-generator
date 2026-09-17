@@ -10,5 +10,5 @@ threshold_name: "get_thresholds"
 model: "gpt2"
 backend: "transformers"
 exclude_words: "exclude.txt"
-include_words: "wiki-100k.txt"
+include_words: "curated_word_list.txt"
 max_repeat: 1

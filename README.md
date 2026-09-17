@@ -44,3 +44,15 @@ EleutherAI/pythia-160m
 bigscience/bloom-560m
 HuggingFaceTB/SmolLM-360M
 Qwen/Qwen2-0.5B
+
+## Distractors
+
+curated_word_list has 19.4 K words of 1-14 characters in length (with at least 2\*\*7 tokens / billion words), filtered to be "real" words of all lower case, and excluding offensive words and (at least decreasing) words associated with violence and other sensitive topics. No guarantees.
+
+We recommend doing a level of distractor filtering that matches your use case. Some potential options/tools:
+
+- Use TODO implement to see and screen the list of distractor words (to your own sensibilities about what "counts" as a word or is in good taste); then find where any problem distractors were and replace/regenerate.
+- Use TODO implement LLM API calls to assess rejectability (note that LLM meta-linguistic judgments are not necessarily trustworthy)
+- Screen all or especially critical items by hand by running through them yourself
+- Pilot materials on a few participants and re-generate/fix distractors that multiple pilot participants get wrong.
+  For many use cases it might not matter that much if a few plausible distractors get through and so filtering may not be worth it. These are options for if you want more quality control, for instance for a high-stakes experiment or an experiment with ex. children.

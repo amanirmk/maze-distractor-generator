@@ -7,23 +7,26 @@ parser = argparse.ArgumentParser(description='Auto-generate Maze materials')
 
 parser.add_argument('input', type=str,
                     help='input file')
-parser.add_argument('output', type=str,
-                    help='output file')
-parser.add_argument('-p','--parameters', type=str, default=None,
+parser.add_argument('output', type=str, nargs='?', default=None,
+                    help='output file (sentence-level CSV); optional in rejection mode')
+parser.add_argument('-p', '--parameters', type=str, default=None,
                     help='parameters file')
 parser.add_argument('--format', choices=["ibex", "delim"], default="delim",
                     help='output format, either delimited or for ibex maze')
+parser.add_argument('--longform', type=str, default=None, metavar='FILE',
+                    help='also write longform output (one row per word position) to FILE')
+parser.add_argument('--rejection-file', type=str, default=None, metavar='FILE',
+                    help='longform CSV with a "rejected" column; regenerate only marked positions')
+parser.add_argument('--num-options', type=int, default=1, metavar='N',
+                    help='number of candidate options to generate per rejected position (default: 1)')
 args = parser.parse_args()
 
-
-'''Takes input, generates distractors, writes to output file
-Arguments:
-infile = where input is
-outfile = where to write output to
-lang_model = either "gulordava" or "one_b" for which language model to use
-out_format = either "basic" (for a semicolon delimited output) or "ibex" for ibex ready output
-Returns: none'''
-if args.parameters==None:
-    run_stuff(args.input, args.output, outformat=args.format)
-else:
-    run_stuff(args.input, args.output, parameters=args.parameters, outformat=args.format)
+run_stuff(
+    args.input,
+    args.output or "",
+    parameters=args.parameters,
+    outformat=args.format,
+    longform_outfile=args.longform,
+    rejection_file=args.rejection_file,
+    num_options=args.num_options,
+)

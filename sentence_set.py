@@ -63,6 +63,48 @@ class Label:
         self.prefixes.append(prefix)
         self.surprisals.append(surprisal)
 
+    def choose_top_n_distractors(self, n, backend, dict, threshold_func, params, banned, sentence_set_id, log_writer=None):
+        """Like choose_distractor, but returns a list of up to n best candidates (good ones first, then best fallbacks).
+
+        Sets self.distractor to the first result for backwards compatibility with the assignment loop.
+        """
+        for surprisal in self.surprisals:
+            self.surprisal_targets.append(max(params["min_abs"], surprisal + params["min_delta"]))
+        min_length, max_length, min_freq, max_freq = threshold_func(self.words)
+        distractor_opts = dict.get_potential_distractors(min_length, max_length, min_freq, max_freq, params)
+        avoid = [strip_punct(word).lower() for word in self.words]
+
+        good = []
+        fallback = []  # (min_surp, word)
+
+        for dist in distractor_opts:
+            if len(good) >= n:
+                break
+            if dist in banned or dist in avoid:
+                continue
+            dist_good = True
+            min_surp = float("inf")
+            for i in range(len(self.words)):
+                dist_surp = get_surprisal(backend=backend, prefix=self.prefixes[i], word=dist)
+                if log_writer:
+                    log_writer.writerow([
+                        "distractor_candidate", sentence_set_id, self.lab,
+                        self.prefixes[i], dist, self.surprisal_targets[i],
+                        dist_surp, dist_surp >= self.surprisal_targets[i]
+                    ])
+                if dist_surp < self.surprisal_targets[i]:
+                    dist_good = False
+                    min_surp = min(min_surp, dist_surp)
+            if dist_good:
+                good.append(dist)
+            else:
+                fallback.append((min_surp, dist))
+
+        fallback.sort(reverse=True, key=lambda x: x[0])
+        result = (good + [w for _, w in fallback])[:n]
+        self.distractor = result[0] if result else "x-x-x"
+        return result
+
     def choose_distractor(self, backend, dict, threshold_func, params, banned, sentence_set_id, log_writer=None):
         """Given a parameters specified in params and stuff
         Find a distractor not on banned (banned=already used in same sentence set)
@@ -120,6 +162,7 @@ class Sentence_Set:
         self.label_ids = set()
         self.first_labels = set()
         self.labels = {}  # dictionary of label:label object
+        self.label_options = {}  # label -> list of candidate words (populated by do_distractors)
 
     def add(self, sentence):
         """Adds a sentence item to the sentence_set"""
@@ -147,13 +190,32 @@ class Sentence_Set:
                 lab = sentence.labels[i]
                 self.labels[lab].add_sentence(sentence.words[i], " ".join(sentence.words[:i]), sentence.surprisal[lab])
 
-    def do_distractors(self, backend, d, threshold_func, params, repeats, log_writer=None):
-        """Get distractors using specified stuff"""
+    def do_distractors(self, backend, d, threshold_func, params, repeats, locked=None, num_options=1, log_writer=None):
+        """Get distractors using specified stuff.
+
+        locked: optional dict mapping label -> distractor word (with punctuation) for positions to keep as-is.
+        num_options: number of candidate options to generate per unlocked position (default 1 = original behavior).
+        """
         banned = repeats.banned[:] #don't allow duplicate distractors within the set
-        for label in self.labels.values(): #get distractors for each label
-            dist = label.choose_distractor(backend, d, threshold_func, params, banned, self.id, log_writer)
-            banned.append(dist)
-            repeats.increment(dist)
+        self.label_options = {}
+        for label in self.labels.values():
+            if locked and label.lab in locked:
+                bare = strip_punct(locked[label.lab]).lower()
+                label.distractor = bare
+                banned.append(bare)
+                repeats.increment(bare)
+                self.label_options[label.lab] = [bare]
+            elif num_options > 1:
+                opts = label.choose_top_n_distractors(num_options, backend, d, threshold_func, params, banned, self.id, log_writer)
+                if opts:
+                    banned.append(opts[0])
+                    repeats.increment(opts[0])
+                self.label_options[label.lab] = opts
+            else:
+                dist = label.choose_distractor(backend, d, threshold_func, params, banned, self.id, log_writer)
+                banned.append(dist)
+                repeats.increment(dist)
+                self.label_options[label.lab] = [dist]
         for sentence in self.sentences: #give the sentences the distractors
             for i in range(1, len(sentence.labels)):
                 lab = sentence.labels[i]

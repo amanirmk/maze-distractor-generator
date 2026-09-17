@@ -6,30 +6,28 @@ import csv
 from main import run_stuff
 
 MODELS = [
-    #("gpt2", "transformers"),
-    #("distilgpt2", "transformers"),
-    #("EleutherAI/gpt-neo-125M", "transformers"),
-    #("facebook/opt-125m", "transformers"),
-    #("HuggingFaceTB/SmolLM-360M", "transformers"),
-    #("Qwen/Qwen2-0.5B", "transformers"),
+    ("gpt2", "transformers"),
+    ("distilgpt2", "transformers"),
+    ("EleutherAI/gpt-neo-125M", "transformers"),
+    ("HuggingFaceTB/SmolLM-360M", "transformers"),
+    ("Qwen/Qwen2-0.5B", "transformers"),
     ("distilbert-base-uncased", "transformers"),
     ("distilroberta-base", "transformers"),
-    
 ]
 
-INFILE = "input/test_in.csv"
+INFILE = "input/test_ns_9_short.csv"
 PARAMS = "params.txt"
 OUTFORMAT = "delim"
 
 
 def run_benchmark(models=MODELS, infile=INFILE, parameters=PARAMS, outformat=OUTFORMAT,
-                  results_file="output/benchmark_results.csv"):
+                  results_file="output/benchmark_results_short.csv"):
     os.makedirs("output", exist_ok=True)
     results = []
 
     for model_name, backend_name in models:
         safe_name = model_name.replace("/", "_")
-        outfile = f"output/bench_{safe_name}.csv"
+        outfile = f"output/bench_short_{safe_name}.csv"
         logging.info("=== Benchmarking %s (backend=%s) ===", model_name, backend_name)
 
         t0 = time.perf_counter()
