@@ -208,5 +208,5 @@ __marimo__/
 .Rproj.user
 .Rhistory
 
-# Generated benchmark/check output (regenerate via benchmark.py / check_distractors.py)
+# Generated output
 output/

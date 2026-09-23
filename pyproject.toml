@@ -1,0 +1,114 @@
+[project]
+name = "maze-distractors"
+version = "1.0.0"
+description = "Generate Maze-task distractor words that a causal language model finds surprising in context."
+readme = "README.md"
+license = "GPL-3.0-only"
+license-files = ["LICENSE"]
+requires-python = ">=3.13"
+dependencies = [
+    "torch>=2.2",
+    "transformers>=5.0",
+    "typer>=0.27.1",
+    "wordfreq>=3.1",
+]
+
+[project.scripts]
+maze-distractors = "maze_distractors.cli:main"
+
+[dependency-groups]
+dev = ["ruff", "ty", "pytest>=8.0"]
+lists = [
+    "lemminflect>=0.2.3",
+    "nltk>=3.10.3",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.25,<0.12.0"]
+build-backend = "uv_build"
+
+# --- ruff: formatter + linter -----------------------------------------------
+[tool.ruff]
+line-length = 80          # formatter and isort wrap here (80 preferred)
+src = ["src", "tests"]    # first-party import detection for isort
+
+[tool.ruff.format]
+quote-style = "double"
+docstring-code-format = true
+
+[tool.ruff.lint]
+select = [
+    "E", "W",   # pycodestyle
+    "F",        # pyflakes
+    "I",        # isort
+    "UP",       # pyupgrade -- modern syntax for the target version
+    "ANN",      # every signature annotated
+    "B",        # bugbear
+    "A",        # no shadowing builtins (id, input, type, ...)
+    "BLE",      # no blind `except Exception` unless logged or re-raised
+    "ERA",      # no commented-out code
+    "SIM",      # simplify
+    "C4",       # comprehensions
+    "C90",      # mccabe complexity (max-complexity below)
+    "RUF",      # ruff's own (RUF012 mutable class attrs, ...)
+    "N",        # pep8-naming
+    "D",        # pydocstyle (docstring *shape*; presence is not required)
+    "PTH",      # pathlib over os.path
+    "RET",      # return consistency
+    "ARG",      # unused arguments
+    "FBT",      # boolean trap: flags are keyword-only
+    "TID",      # tidy imports (absolute imports only, see below)
+    "SLF",      # no private-member access across objects
+    "TRY",      # exception hygiene
+    "PLE", "PLW", "PLC", "PLR",   # pylint error/warning/convention/refactor
+    "PERF", "FURB", "PIE", "FLY", # idiom cleanups
+    "PD", "NPY",                  # pandas / numpy
+    "PT",       # pytest style
+    "ICN",      # import conventions (pd, np, ...)
+    "T10", "EXE", "YTT", "ASYNC", "DTZ", "G", "LOG", "RSE", "PGH",
+    # bandit, curated: swallowed errors, eval/exec, secrets, pickle, shell/SQL injection
+    "S102", "S105", "S106", "S107", "S110", "S112", "S113", "S301", "S307", "S602", "S608",
+]
+ignore = [
+    "D1",       # docstrings are optional: no "missing docstring" findings
+    "D205",     # a summary may wrap onto a second line with no blank line after it
+    "D209",     # closing quotes stay on the last text line, not their own line
+    "D415",     # ...so the first line need not end in punctuation
+    "ANN401",   # `Any` is allowed where it is honest
+    "TRY003",   # exception messages may be written at the raise site
+    "PLR09",    # no "too many arguments/branches/statements/returns"
+    "PLR2004",  # no "magic value" comparisons
+    "PD011",    # `.values` check is false-positive-prone
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D", "ARG", "ANN", "SLF", "FBT", "S105", "S106"]  # S10x: "bos_token" is no password
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"     # summary on the first line (D212); Args:/Returns: sections when used
+
+[tool.ruff.lint.pycodestyle]
+max-line-length = 120     # E501: the hard limit -- lines the formatter can't split
+max-doc-length = 80       # W505: comments and docstrings stay at 80
+
+[tool.ruff.lint.flake8-annotations]
+mypy-init-return = true   # no `-> None` required on __init__
+suppress-dummy-args = true
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"   # absolute imports within a package
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+# --- ty: type checker (beta -- advisory until 1.0) --------------------------
+[tool.ty]
+# Reads requires-python for the target version. Add per-rule severities under
+# [tool.ty.rules] only when a specific rule misfires on a dependency.
+
+# --- pytest -----------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["-m", "not slow"]   # `uv run pytest -m slow` runs the rest
+markers = ["slow: loads a real model from the local HuggingFace cache"]
+filterwarnings = ["error"]
