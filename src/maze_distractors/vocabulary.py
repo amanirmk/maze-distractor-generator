@@ -10,18 +10,40 @@ from importlib import resources
 from pathlib import Path
 from typing import Self
 
+import langcodes
 import wordfreq
 
 from maze_distractors.punctuation import strip_punctuation
 
 logger = logging.getLogger(__name__)
 
-# Frequencies are natural-log occurrences per billion words, on which the
-# least frequent word of the curated English list sits at 6.5 and "the"
-# near 18.
-_PER_BILLION = 1e9
-# Log units of frequency within which a word counts as matching another.
+# Frequencies are log2 occurrences per billion words -- the base surprisal
+# is measured in -- on which the least frequent word of the curated English
+# list sits near 9.4 and "the" near 26.
+# Log2 units of frequency within which a word counts as matching another:
+# a factor of two, about the resolution of the frequency estimates and of
+# a reader's sensitivity to them.
 _MATCHED = 1.0
+# Nothing is as common as the most common words, so a target above this
+# (about 160 per million) is matched as a range reaching down to it: the
+# frequency limit's lower end is set from here, not from the target.
+_COMMON = math.log2(1.6e5)
+
+
+def is_english(language: str) -> bool:
+    """Any code wordfreq reads as English (``en``, ``eng``, ``en-US``,
+    ``en_GB``), normalised as wordfreq normalises it, so that the English
+    lists apply to all of them."""
+    return langcodes.standardize_tag(language).split("-")[0] == "en"
+
+
+def log2_per_billion(zipf: float) -> float:
+    """The Zipf scale wordfreq uses (log10 per billion) in log2 units. The
+    one conversion for vocabulary words and target words alike, so a word's
+    own frequency matches itself exactly."""
+    return zipf * math.log2(10)
+
+
 # wordfreq's frequencies sit on a grid of 0.01 in log10, so two words are
 # often exactly a factor of 1 or 10 apart, which the last digit of a float
 # must not decide.
@@ -86,7 +108,7 @@ class MatchRange:
 
     def tier(self, frequency: float) -> int:
         """0 for a frequency that matches the words, and one more for each
-        further log unit away."""
+        further factor of two away."""
         beyond = self.distance(frequency) - _MATCHED - _TOLERANCE
         return math.ceil(max(beyond, 0.0))
 
@@ -100,12 +122,12 @@ class Vocabulary:
         # for any other language (scripts/build_noun_phrase_breakers.py).
         self.noun_phrase_breakers = (
             packaged_words("noun_phrase_breakers.txt")
-            if language == "en"
+            if is_english(language)
             else frozenset()
         )
         frequencies = _frequencies(language)
         self._frequency = {
-            word: math.log(frequencies[word] * _PER_BILLION)
+            word: log2_per_billion(wordfreq.zipf_frequency(word, language))
             for word in set(words)
             if word in frequencies and word.isalpha() and word == word.lower()
         }
@@ -128,7 +150,7 @@ class Vocabulary:
         curated list). Files hold one word per line."""
         if include is not None:
             words = _read_words(include)
-        elif language == "en":
+        elif is_english(language):
             words = packaged_words("curated_word_list.txt")
         else:
             words = set(_frequencies(language, wordlist="small"))
@@ -141,7 +163,7 @@ class Vocabulary:
                 len(words),
             )
         built_in: set[str] = set()
-        if language == "en":
+        if is_english(language):
             built_in |= packaged_words("exclude.txt")
             built_in |= packaged_words("proper_nouns.txt")
         excluded = set(built_in)
@@ -175,21 +197,21 @@ class Vocabulary:
 
         Both are clamped, since the very shortest, longest and most common
         words have too few equals to choose among: lengths always reach 4
-        and start by 12, and a word more common than e^12 per billion
-        (about 160 per million) has its range widened down to that. A word
-        rarer than the whole vocabulary, or unknown to wordfreq, has no
-        equals at all and is treated as the vocabulary's rarest.
+        and start by 12, and a word more common than ``_COMMON`` (about
+        160 per million) has its range widened down to that. A word rarer
+        than the whole vocabulary, or unknown to wordfreq, has no equals
+        at all and is treated as the vocabulary's rarest.
         """
         cores = [strip_punctuation(word) for word in words]
         lengths = [len(core) for core in cores]
         frequencies = [
-            wordfreq.zipf_frequency(core, self.language) * math.log(10)
+            log2_per_billion(wordfreq.zipf_frequency(core, self.language))
             for core in cores
         ]
         return MatchRange(
             min_length=min(min(lengths) - 1, 12),
             max_length=max(max(lengths) + 1, 4),
-            min_frequency=min(*frequencies, 12),
+            min_frequency=min(*frequencies, _COMMON),
             max_frequency=max(*frequencies, self._rarest),
         )
 
@@ -205,25 +227,36 @@ class Vocabulary:
     ) -> list[str]:
         """Every word whose length matches ``words`` or is up to
         ``extra_letters`` further off, whose frequency is within a factor
-        of ``max_ratio`` of theirs, and that is not in ``avoid`` -- those
-        matching in frequency first, then by whole log units beyond that.
-        With ``breaking_noun_phrase``, only words that cannot continue a
-        noun phrase.
+        of ``max_ratio`` of theirs, and that is not in ``avoid``, closest
+        matches first: a word of exactly a target's length before one a
+        letter off, and among those, the closest in frequency (by factors
+        of two) first. With ``breaking_noun_phrase``, only words that
+        cannot continue a noun phrase.
 
-        Within a distance the order is a hash of ``order_key`` and the word,
-        not a shuffle: it is reproducible, and it does not change for the
-        other words when one is added to an exclusion list.
+        Length outranks frequency because a distractor a letter longer or
+        shorter is a visible cue, and with no preference the longer one
+        wins most positions: English has more words at each longer
+        length. Within a length and a frequency tier the order is a hash
+        of ``order_key`` and the word, not a shuffle: it is reproducible,
+        and it does not change for the other words when one is added to
+        an exclusion list.
         """
         band = self.match_range(words)
         shortest = band.min_length - extra_letters
         longest = band.max_length + extra_letters
-        furthest = math.log(max_ratio) + _TOLERANCE
+        furthest = math.log2(max_ratio) + _TOLERANCE
+        target_lengths = {len(strip_punctuation(word)) for word in words}
         ranked = [
-            (band.tier(frequency), hash_order(order_key, word), word)
+            (
+                min(abs(len(word) - n) for n in target_lengths),
+                band.tier(frequency),
+                hash_order(order_key, word),
+                word,
+            )
             for word, frequency in self._frequency.items()
             if shortest <= len(word) <= longest
             and band.distance(frequency) <= furthest
             and word not in avoid
             and (not breaking_noun_phrase or word in self.noun_phrase_breakers)
         ]
-        return [word for _, _, word in sorted(ranked)]
+        return [word for _, _, _, word in sorted(ranked)]

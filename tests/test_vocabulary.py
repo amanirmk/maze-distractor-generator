@@ -21,7 +21,15 @@ def test_the_band_is_one_letter_either_side_and_the_words_frequencies():
     assert band.distance(band.min_frequency) == 0
 
 
-def test_within_one_log_unit_is_a_match_and_tiers_count_units_beyond():
+def test_the_shortest_and_longest_targets_keep_a_window_of_lengths():
+    vocabulary = Vocabulary(WORDS)
+    assert vocabulary.match_range(["ox"]).max_length == 4
+    assert vocabulary.match_range(["a"]).max_length == 4
+    assert vocabulary.match_range(["internationally"]).min_length == 12
+    assert vocabulary.match_range(["establishments"]).min_length == 12
+
+
+def test_within_a_factor_of_two_is_a_match_and_tiers_count_factors_beyond():
     band = Vocabulary(WORDS).match_range(["zebra"])
     assert band.min_frequency == band.max_frequency
     tiers = [band.tier(band.min_frequency - d) for d in (0, 1, 1.01, 2, 2.5)]
@@ -32,8 +40,8 @@ def test_a_very_common_word_is_matched_as_if_merely_common():
     # Nothing is as frequent as "the"; its distractors are matched to the
     # most common words there are enough of.
     band = Vocabulary(WORDS).match_range(["the"])
-    assert band.min_frequency == 12
-    assert band.max_frequency > 17
+    assert band.min_frequency == pytest.approx(math.log2(1.6e5))
+    assert band.max_frequency > 25
 
 
 def test_a_word_rarer_than_the_vocabulary_is_matched_to_its_rarest():
@@ -42,8 +50,8 @@ def test_a_word_rarer_than_the_vocabulary_is_matched_to_its_rarest():
     for word in ("zorbled", "oscillated"):  # unknown to wordfreq; known, rare
         assert vocabulary.match_range([word]).max_frequency == rarest
         near = vocabulary.candidates([word], set(), "key", max_ratio=10)
-        ratios = [math.exp(vocabulary._frequency[w] - rarest) for w in near]
-        assert 9 < max(ratios) <= 10
+        ratios = [2 ** (vocabulary._frequency[w] - rarest) for w in near]
+        assert 9 < max(ratios) <= 10 + 1e-9
     assert vocabulary.match_range(["garden"]).max_frequency > rarest
 
 
@@ -52,14 +60,23 @@ def test_candidates_match_length_and_skip_avoided_words():
     assert set(candidates) == {"house", "zebra"}
 
 
-def test_words_matching_in_frequency_come_first():
+def test_exact_length_comes_first_then_the_closest_frequency():
     vocabulary = Vocabulary.load()
     band = vocabulary.match_range(["garden"])
     candidates = vocabulary.candidates(["garden"], set(), "key")
-    tiers = [band.tier(vocabulary._frequency[word]) for word in candidates]
+    distances = [abs(len(word) - 6) for word in candidates]
+    assert distances == sorted(distances)
+    assert distances[0] == 0
+    assert distances[-1] == 1
+    exact = [w for w in candidates if len(w) == 6]
+    tiers = [band.tier(vocabulary._frequency[word]) for word in exact]
     assert tiers == sorted(tiers)
     assert tiers[0] == 0
     assert tiers[-1] > 0
+    # a word a letter off comes after every exact-length one, however
+    # close in frequency
+    off = [w for w in candidates if len(w) != 6]
+    assert candidates.index(off[0]) == len(exact)
 
 
 def test_a_ratio_of_ten_keeps_words_within_an_order_of_magnitude():
@@ -179,6 +196,14 @@ def test_an_include_file_replaces_the_curated_list(tmp_path):
     assert set(Vocabulary.load(include=include)._frequency) == {"dog", "cat"}
 
 
+@pytest.mark.parametrize("code", ["en-US", "en_GB", "EN", "eng"])
+def test_every_english_code_gets_every_english_list(code):
+    english = Vocabulary.load("en")
+    regional = Vocabulary.load(code)
+    assert regional.words == english.words
+    assert regional.noun_phrase_breakers == english.noun_phrase_breakers
+
+
 def test_another_language_uses_its_own_frequencies():
     french = Vocabulary(["chien", "maison", "dog"], language="fr")
     assert "chien" in french._frequency
@@ -193,7 +218,7 @@ def test_another_language_falls_back_to_the_small_list_with_a_warning(
     assert {"la", "el", "les"} <= spanish.words
     assert not {"la", "el"} & Vocabulary.load().words
     assert 10_000 < len(spanish) < 40_000  # the small list, not the large
-    assert min(spanish._frequency.values()) >= math.log(1e-6 * 1e9) - 0.01
+    assert min(spanish._frequency.values()) >= math.log2(1e-6 * 1e9) - 0.01
     assert "No curated word list for 'es'" in caplog.text
     assert "--include" in caplog.text
 

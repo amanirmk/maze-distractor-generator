@@ -1,5 +1,6 @@
 import csv
 import json
+import math
 import re
 
 from maze_distractors.formats import (
@@ -9,6 +10,7 @@ from maze_distractors.formats import (
     write_report,
 )
 from maze_distractors.generation import (
+    MISSING,
     PLACEHOLDER,
     ChosenDistractor,
     SentenceDistractors,
@@ -83,8 +85,30 @@ def test_the_report_has_a_row_per_position(tmp_path):
         "position": "1",
         "word": "cat",
         "distractor": "rug",
-        "threshold": "25.000",
-        "surprisal": "27.123",
+        "threshold": "25.000000",
+        "surprisal": "27.123400",
         "met": "True",
     }
     assert rows[1]["met"] == "False"
+
+
+def test_a_position_without_a_distractor_is_reported_as_such(tmp_path):
+    file = tmp_path / "report.csv"
+    missing = ChosenDistractor(
+        SENTENCE, 1, MISSING, threshold=25.0, surprisal=math.nan
+    )
+    write_report(file, [missing])
+    with file.open(newline="") as f:
+        (row,) = csv.DictReader(f)
+    assert row["distractor"] == MISSING
+    assert row["surprisal"] == "nan"
+    assert row["met"] == "False"
+
+
+def test_csv_for_an_amaze_input_is_amazes_layout(tmp_path):
+    file = tmp_path / "out.csv"
+    write_csv(file, DISTRACTED, amaze=True)
+    (row,) = file.read_text().splitlines()
+    assert row.startswith("sub_rel;3;")
+    assert row.count(";") == 4
+    assert "type" not in row

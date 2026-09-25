@@ -9,13 +9,21 @@ from pathlib import Path
 from maze_distractors.generation import ChosenDistractor, SentenceDistractors
 
 
-def write_csv(file: Path, distracted: Sequence[SentenceDistractors]) -> None:
-    """One row per sentence: what was read, and its distractors."""
+def write_csv(
+    file: Path,
+    distracted: Sequence[SentenceDistractors],
+    *,
+    amaze: bool = False,
+) -> None:
+    """One row per sentence: what was read, and its distractors. With
+    ``amaze``, in A-Maze's own output layout -- semicolon-separated, no
+    header -- for an input that came in that way."""
     with file.open("w", encoding="utf-8", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(
-            ["type", "item_num", "sentence", "distractors", "labels"]
-        )
+        writer = csv.writer(f, delimiter=";" if amaze else ",")
+        if not amaze:
+            writer.writerow(
+                ["type", "item_num", "sentence", "distractors", "labels"]
+            )
         for d in distracted:
             writer.writerow(
                 [
@@ -67,8 +75,8 @@ class Format(StrEnum):
     JSPSYCH = "jspsych"
 
 
+# CSV is written by write_csv itself, which takes the A-Maze layout.
 WRITERS: dict[Format, Callable[[Path, Sequence[SentenceDistractors]], None]] = {
-    Format.CSV: write_csv,
     Format.IBEX: write_ibex,
     Format.JSPSYCH: write_jspsych,
 }
@@ -101,8 +109,8 @@ def write_report(file: Path, chosen: Sequence[ChosenDistractor]) -> None:
                     p.index,
                     p.sentence.words[p.index],
                     p.distractor,
-                    f"{p.threshold:.3f}",
-                    f"{p.surprisal:.3f}",
+                    f"{p.threshold:.6f}",
+                    f"{p.surprisal:.6f}",
                     p.met,
                 ]
             )

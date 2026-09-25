@@ -391,9 +391,10 @@ wheels = [
 
 [[package]]
 name = "maze-distractors"
-version = "1.0.0"
+version = "1.0.1"
 source = { editable = "." }
 dependencies = [
+    { name = "langcodes" },
     { name = "torch" },
     { name = "transformers" },
     { name = "typer" },
@@ -413,6 +414,7 @@ lists = [
 
 [package.metadata]
 requires-dist = [
+    { name = "langcodes", specifier = ">=3.0" },
     { name = "torch", specifier = ">=2.2" },
     { name = "transformers", specifier = ">=5.0" },
     { name = "typer", specifier = ">=0.27.1" },

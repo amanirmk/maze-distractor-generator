@@ -4,8 +4,11 @@ of the vocabulary because they are mainly proper nouns ("josh", "oxford",
 
     uv run python scripts/build_proper_noun_list.py
     uv run python scripts/build_proper_noun_list.py --scores scores.csv
+    uv run python scripts/build_proper_noun_list.py --words w.txt --out n.txt
 
-Every word of the curated list is judged by
+Every word of the curated list (or, with --words, of your own list, whose
+result goes to --out and is passed to maze-distractors with --exclude) is
+judged by
 maze_distractors.proper_nouns.is_likely_proper_noun, from how often SUBTLEX-US
 has it capitalized and how much gpt2-medium prefers it so. The list is the
 output of that rule, not of anyone's judgement. SUBTLEX-US is downloaded
@@ -63,25 +66,71 @@ def download_subtlex(directory: Path) -> Path:
     return Path(archive.extract(SUBTLEX_MEMBER, directory))
 
 
+def _output_for(words_file: Path | None, out: Path | None) -> Path:
+    """Where the list goes: the shipped file for the curated list. For a
+    user's own, a file of theirs: not the shipped list, whose names it
+    would replace, and not the word list it is built from."""
+    if words_file is None:
+        return out or LIST_FILE
+    if out is None or out.resolve() == LIST_FILE.resolve():
+        raise typer.BadParameter(
+            "with --words, give --out a file of your own: the shipped "
+            "proper-noun list is built from the curated words only",
+            param_hint="--out",
+        )
+    if out.resolve() == words_file.resolve():
+        raise typer.BadParameter(
+            "--out would replace the --words list with its proper nouns",
+            param_hint="--out",
+        )
+    return out
+
+
 def main(
+    words_file: Annotated[
+        Path | None,
+        typer.Option(
+            "--words",
+            exists=True,
+            dir_okay=False,
+            help="Words to judge, one per line. Default: the curated list.",
+        ),
+    ] = None,
     subtlex: Annotated[
         Path | None,
         typer.Option(exists=True, dir_okay=False, help="Default: download."),
     ] = None,
-    out: Annotated[Path, typer.Option(dir_okay=False)] = LIST_FILE,
+    out: Annotated[
+        Path | None,
+        typer.Option(
+            dir_okay=False,
+            help="Default: the shipped list, which --words may not replace.",
+        ),
+    ] = None,
     scores: Annotated[
         Path | None,
         typer.Option(dir_okay=False, help="Also write every word's numbers."),
     ] = None,
 ) -> None:
+    out = _output_for(words_file, out)
     # The curated list as shipped, not Vocabulary.load(): the list being
-    # rebuilt must not decide which words get judged.
-    words = sorted(Vocabulary(packaged_words("curated_word_list.txt")).words)
+    # rebuilt must not decide which words get judged. Or a user's own
+    # list, for --include, whose result they pass with --exclude.
+    source = (
+        set(words_file.read_text(encoding="utf-8-sig").split())
+        if words_file
+        else packaged_words("curated_word_list.txt")
+    )
+    words = sorted(Vocabulary(source).words)
     with tempfile.TemporaryDirectory() as directory:
         shares = capitalized_shares(
             subtlex or download_subtlex(Path(directory))
         )
-    scorer = Scorer.from_pretrained(MODEL, revision=MODEL_REVISION)
+    # On the CPU wherever it runs: another device's arithmetic can move a
+    # word that sits near a threshold.
+    scorer = Scorer.from_pretrained(
+        MODEL, revision=MODEL_REVISION, device="cpu"
+    )
     scored = capital_preferences(scorer, words)
     listed = [
         w for w in words if is_likely_proper_noun(shares.get(w), scored[w])

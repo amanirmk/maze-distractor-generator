@@ -1,4 +1,5 @@
 import math
+import re
 
 import pytest
 
@@ -11,7 +12,7 @@ from maze_distractors.generation import (
     generate,
 )
 from maze_distractors.items import Sentence
-from maze_distractors.punctuation import strip_punctuation
+from maze_distractors.punctuation import case_of, strip_punctuation
 from maze_distractors.vocabulary import Vocabulary
 
 # Under the test model a token costs roughly 8-16 bits, so a 30-bit floor
@@ -70,7 +71,10 @@ def exhaustive_choice(
     scorer, vocabulary, settings, item, label, target_words, avoid
 ):
     """The specified choice, made without any shortcut: exact surprisal of
-    every candidate at every target word, in candidate order."""
+    every candidate at every target word, shown in that word's
+    capitalization and counted for the lower of that and lower case, in
+    candidate order, the length match widened a letter at a time until
+    there are enough candidates."""
     thresholds = [
         max(
             settings.min_abs,
@@ -79,23 +83,31 @@ def exhaustive_choice(
         for context, word in target_words
     ]
     best, best_shortfall = None, math.inf
-    candidates = vocabulary.candidates(
-        [word for _, word in target_words],
-        avoid,
-        f"{settings.seed}\0{item}\0{label}",
-        settings.max_frequency_ratio,
-    )
-    if any(
+    after_determiner = any(
         strip_punctuation(context.split()[-1]).lower() in DETERMINERS
         for context, _ in target_words
-    ):
-        candidates = [
-            c for c in candidates if c in vocabulary.noun_phrase_breakers
-        ]
+    )
+    words = [word for _, word in target_words]
+    reach = max(vocabulary.longest, vocabulary.match_range(words).min_length)
+    for extra_letters in range(reach + 1):
+        candidates = vocabulary.candidates(
+            words,
+            avoid,
+            f"{settings.seed}\0{item}\0{label}",
+            settings.max_frequency_ratio,
+            extra_letters=extra_letters,
+        )
+        if after_determiner:
+            candidates = [
+                c for c in candidates if c in vocabulary.noun_phrase_breakers
+            ]
+        if len(candidates) >= settings.min_candidates:
+            break
     for candidate in candidates:
         shortfall = max(
-            threshold - reference_surprisal(scorer, context, candidate)
-            for threshold, (context, _) in zip(
+            threshold
+            - scored_surprisal(scorer, context, case_of(word)(candidate))
+            for threshold, (context, word) in zip(
                 thresholds, target_words, strict=True
             )
         )
@@ -106,19 +118,11 @@ def exhaustive_choice(
     return best
 
 
-def test_the_shortcuts_choose_what_an_exhaustive_search_chooses(
-    scorer, vocabulary
-):
-    # A few hundred words, since the reference scores every one of them;
-    # and a floor high enough that some positions find none, so the fallback
-    # is compared as well as the first-to-pass rule.
-    breakers = vocabulary.noun_phrase_breakers & vocabulary.words
-    vocabulary = Vocabulary(
-        sorted(vocabulary.words)[::60] + sorted(breakers)[::8]
-    )
-    settings = Settings(min_delta=4.0, min_abs=58.0, max_repeat=0)
-    sentences = RELATIVE_CLAUSES
-    _, positions = generate(RELATIVE_CLAUSES, scorer, vocabulary, settings)
+def _compare_with_exhaustive_search(scorer, vocabulary, settings, sentences):
+    """Generate for one item and check each label's choice against
+    ``exhaustive_choice``. Returns the positions."""
+    (item,) = {s.item for s in sentences}
+    _, positions = generate(sentences, scorer, vocabulary, settings)
     target_words: dict[str, list[tuple[str, str]]] = {}
     for s in sentences:
         for i in range(1, len(s.words)):
@@ -126,21 +130,72 @@ def test_the_shortcuts_choose_what_an_exhaustive_search_chooses(
                 (" ".join(s.words[:i]), s.words[i])
             )
     used: set[str] = set()
-    item_words = {bare(word) for s in sentences for word in s.words}
+    # Whole words and their letter runs: "cat" of "cat's" is a word the
+    # reader has just seen.
+    item_words = {
+        part
+        for s in sentences
+        for word in s.words
+        for part in [bare(word), *re.findall(r"[^\W\d_]+", word.lower())]
+    }
     for label, label_words in target_words.items():
-        avoid = used | item_words
         expected = exhaustive_choice(
-            scorer, vocabulary, settings, "3", label, label_words, avoid
-        )
+            scorer, vocabulary, settings, item, label, label_words,
+            used | item_words,
+        )  # fmt: skip
         used.add(expected)
         chosen = {
             bare(p.distractor)
             for p in positions
             if p.sentence.labels[p.index] == label
         }
-        assert chosen == {expected}
+        assert chosen == {expected}, label
+    return positions
+
+
+def _reference_vocabulary(vocabulary, extra=()):
+    # A few hundred words, since the reference scores every one of them.
+    breakers = vocabulary.noun_phrase_breakers & vocabulary.words
+    return Vocabulary(
+        sorted(vocabulary.words)[::60] + sorted(breakers)[::8] + list(extra)
+    )
+
+
+def test_the_shortcuts_choose_what_an_exhaustive_search_chooses(
+    scorer, vocabulary, caplog
+):
+    # A floor high enough that some positions find none, so the fallback
+    # is compared as well as the first-to-pass rule; and a minimum some
+    # positions fall short of, so the widened length match is compared too.
+    settings = Settings(
+        min_delta=4.0, min_abs=58.0, max_repeat=0, min_candidates=20
+    )
+    positions = _compare_with_exhaustive_search(
+        scorer, _reference_vocabulary(vocabulary), settings, RELATIVE_CLAUSES
+    )
     # Both outcomes occur, so both branches of the search were compared.
     assert {p.met for p in positions} == {True, False}
+    assert "further off" in caplog.text
+    # A position that fell short is logged, as the README says.
+    assert "bits short" in caplog.text
+
+
+def test_the_exhaustive_search_agrees_on_capitals_and_word_parts(
+    scorer, vocabulary
+):
+    # Capitalized targets are held to both forms, and the parts of "cat's"
+    # and "well-known" are in the vocabulary but may not be chosen.
+    sentences = [
+        sentence("a", "7", "Yesterday the cat's owner met Boston's well-known MAYOR."),
+        sentence("b", "7", "Yesterday the cat's owner met boston's well-known mayor."),
+    ]  # fmt: skip
+    settings = Settings(min_delta=4.0, min_abs=40.0, max_repeat=0)
+    reference = _reference_vocabulary(vocabulary, ["cat", "well", "known"])
+    positions = _compare_with_exhaustive_search(
+        scorer, reference, settings, sentences
+    )
+    chosen = {bare(p.distractor) for p in positions}
+    assert not chosen & {"cat", "well", "known"}
 
 
 def test_the_report_holds_exact_surprisals_and_each_words_own_threshold(
@@ -154,7 +209,6 @@ def test_the_report_holds_exact_surprisals_and_each_words_own_threshold(
         assert p.surprisal == pytest.approx(
             scored_surprisal(scorer, context, p.distractor), abs=1e-3
         )
-        assert p.met == (p.surprisal >= p.threshold)
 
 
 def test_after_a_determiner_only_a_word_that_ends_the_noun_phrase_is_tried(
@@ -235,6 +289,8 @@ def test_distractors_follow_the_words_punctuation_and_capitals(
     assert first[-1].endswith(".")
     assert first[-1][:-1].islower()
     assert second[-2].endswith(",")
+    assert second[-1] != MISSING
+    assert second[-1].endswith(".")
     assert second[-1] == second[-1].upper()
     assert all(len(d.distractors) == len(d.sentence.words) for d in distracted)
 
@@ -288,7 +344,55 @@ def test_when_no_length_matches_the_nearest_length_is_tried(scorer, caplog):
     assert {bare(d) for d in distracted.distractors[1:]} == set(
         long_words.words
     )
-    assert "no word of matching length" in caplog.text
+    assert "0 candidate(s) at the matching lengths" in caplog.text
+
+
+def test_too_few_candidates_let_in_lengths_further_off_but_after(
+    scorer, caplog
+):
+    # Any word meets a threshold this low, so the first candidate is chosen.
+    anything = {"min_delta": -1000.0, "min_abs": 0.0}
+    item = [sentence("a", "1", "Maybe dog.")]
+    words = Vocabulary(["cat", "horse"])
+
+    def tried_first(min_candidates):
+        settings = Settings(
+            **anything,
+            max_frequency_ratio=math.inf,
+            min_candidates=min_candidates,
+        )
+        (distracted,) = generate(item, scorer, words, settings)[0]
+        return bare(distracted.distractors[1])
+
+    assert tried_first(1) == "cat"
+    assert "further off" not in caplog.text
+    # "horse" is let in, but after "cat", which is closer in length.
+    assert tried_first(2) == "cat"
+    assert "1 candidate(s) at the matching lengths" in caplog.text
+    # With nothing further off to let in, there is nothing to warn of.
+    caplog.clear()
+    generate(
+        item,
+        scorer,
+        Vocabulary(["cat", "sun"]),
+        Settings(**anything, min_candidates=10),
+    )
+    assert "further off" not in caplog.text
+
+
+def test_lengths_are_widened_downward_as_far_as_the_vocabulary_needs(scorer):
+    short_words = Vocabulary(["cat", "dog", "sun", "sat", "run"])
+    settings = Settings(min_abs=0.0, max_frequency_ratio=math.inf)
+    (distracted,) = generate(
+        [sentence("a", "1", "Maybe establishment sleeps.")],
+        scorer,
+        short_words,
+        settings,
+    )[0]
+    assert MISSING not in distracted.distractors
+    assert {bare(d) for d in distracted.distractors[1:]} <= set(
+        short_words.words
+    )
 
 
 def test_no_distractor_repeats_within_an_item_or_is_the_real_word(
@@ -299,6 +403,15 @@ def test_no_distractor_repeats_within_an_item_or_is_the_real_word(
         chosen = [bare(word) for word in d.distractors[1:]]
         assert len(set(chosen)) == len(chosen)
         assert not set(chosen) & {bare(word) for word in d.sentence.words}
+
+
+def test_the_parts_of_a_hyphenated_or_possessive_word_are_not_distractors(
+    scorer,
+):
+    parts = Vocabulary(["cat", "well", "known", "owner"])
+    item = [sentence("a", "1", "The cat's owner was well-known.")]
+    distracted, _ = generate(item, scorer, parts, Settings(min_abs=0.0))
+    assert set(distracted[0].distractors[1:]) == {MISSING}
 
 
 def test_no_real_word_of_the_item_is_a_distractor_anywhere_in_it(scorer):
@@ -385,5 +498,5 @@ def test_the_frequency_cap_is_kept_even_when_no_word_meets_the_threshold(
             )
         ]
 
-    assert max(distances(10.0)) <= math.log(10)
-    assert max(distances(math.inf)) > math.log(10)
+    assert max(distances(10.0)) <= math.log2(10) + 1e-9
+    assert max(distances(math.inf)) > math.log2(10)

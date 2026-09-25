@@ -2,6 +2,7 @@
 
 import logging
 import math
+import re
 from collections import Counter
 from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
@@ -40,11 +41,22 @@ class Settings:
     # Times rarer or more common than the threshold words a distractor may be;
     # math.inf to meet the threshold whatever the frequency.
     max_frequency_ratio: float = 10.0
+    # Words the length window must let in before it stops widening, so that
+    # a position with only a few words close in length still has a choice.
+    # The closest lengths are still tried first.
+    min_candidates: int = 10
     # After a determiner, try only words that cannot continue the noun
     # phrase: there a noun, adjective, participle or adverb could go on to
     # make a sentence however surprising it is ("The alluded...").
     break_noun_phrases: bool = True
     seed: int = 0
+
+    def __post_init__(self) -> None:
+        # nan compares false with everything, so it would pass every
+        # threshold check and then break the run record.
+        for name, value in vars(self).items():
+            if isinstance(value, float) and math.isnan(value):
+                raise ValueError(f"The setting {name} is nan.")
 
 
 @dataclass(frozen=True)
@@ -129,13 +141,23 @@ def _candidates(
     settings: Settings,
     avoid: Collection[str],
 ) -> list[str]:
-    """The words to try at ``target_words``, in order. When no word has a
-    matching length, lengths a letter further off are let in until one
-    does: a poorer match on screen is better than no distractor."""
+    """The words to try at ``target_words``, in order. When fewer than
+    ``settings.min_candidates`` pass the filters at the matching lengths --
+    length, frequency, the words to avoid and the noun-phrase rule together
+    -- lengths a letter further off are let in until enough do: a poorer
+    match on screen is better than no distractor, or than one forced by
+    having nothing else to try. The words let in are tried after those
+    closer in length."""
     candidates: list[str] = []
-    for extra_letters in range(vocabulary.longest + 1):
-        candidates = vocabulary.candidates(
-            [target_word.word for target_word in target_words],
+    matching = 0  # how many passed at the matching lengths
+    widened_to = 0  # letters further off than those, where the last came in
+    words = [target_word.word for target_word in target_words]
+    # Far enough to reach the vocabulary's longest word upward and its
+    # shortest downward.
+    reach = max(vocabulary.longest, vocabulary.match_range(words).min_length)
+    for extra_letters in range(reach + 1):
+        wider = vocabulary.candidates(
+            words,
             avoid=avoid,
             order_key=f"{settings.seed}\0{item}\0{label}",
             max_ratio=settings.max_frequency_ratio,
@@ -149,16 +171,26 @@ def _candidates(
                 )
             ),
         )
-        if candidates:
-            if extra_letters:
-                logger.warning(
-                    "Item %s, label %s: no word of matching length; trying "
-                    "those up to %d letter(s) further off.",
-                    item,
-                    label,
-                    extra_letters,
-                )
+        if extra_letters == 0:
+            matching = len(wider)
+        elif len(wider) > len(candidates):
+            widened_to = extra_letters
+        candidates = wider
+        if len(candidates) >= settings.min_candidates:
             break
+    # Only when the words let in are there to be tried: a vocabulary with
+    # nothing further off is not worth a warning at every position.
+    if widened_to:
+        logger.warning(
+            "Item %s, label %s: %d candidate(s) at the matching lengths "
+            "(length, frequency, repeats and the noun-phrase rule together), "
+            "fewer than %d; trying lengths up to %d letter(s) further off.",
+            item,
+            label,
+            matching,
+            settings.min_candidates,
+            widened_to,
+        )
     return candidates
 
 
@@ -251,9 +283,10 @@ def _search(
         scores = score_in_variants(scorer, variants, chunk, exactly=False)
         for word, surprisals in zip(chunk, scores, strict=True):
             short = shortfall(surprisals)
-            if short <= 0:
-                # Confirmed on the exact values that get reported, which
-                # can differ in the last digits from a bound or a batch.
+            if short <= _NEAR_MISS:
+                # Settled on the exact values that get reported, which can
+                # differ in the last digits from a bound or a batch -- in
+                # either direction, so a near miss is rechecked too.
                 confirmed = score_exactly(word)
                 short = shortfall(confirmed)
                 if short <= 0:
@@ -264,6 +297,10 @@ def _search(
     if best is None:
         return None, [math.nan] * len(variants)
     return best, score_exactly(best)
+
+
+# Bits. A shortfall this small in a padded batch may be float noise.
+_NEAR_MISS = 1e-3
 
 
 def _choose(
@@ -297,9 +334,16 @@ def _distract_item(
     chosen: dict[tuple[int, int], ChosenDistractor] = {}
     used_here: set[str] = set()
     # No word of the item, wherever it stands: "the" beside "the", or a
-    # word the reader has just seen, is no test of reading.
+    # word the reader has just seen, is no test of reading. That includes
+    # the parts of "cat's" and "well-known".
     item_words = {
-        strip_punctuation(word).lower() for s in sentences for word in s.words
+        part
+        for s in sentences
+        for word in s.words
+        for part in [
+            strip_punctuation(word).lower(),
+            *re.findall(r"[^\W\d_]+", word.lower()),
+        ]
     }
     for label, target_words in _target_words_by_label(
         sentences, scorer, settings

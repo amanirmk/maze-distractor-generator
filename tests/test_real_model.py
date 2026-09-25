@@ -7,6 +7,7 @@ uv run pytest -m slow
 import math
 
 import pytest
+from huggingface_hub import try_to_load_from_cache
 
 from conftest import reference_surprisal
 from maze_distractors.cli import DEFAULT_MODEL
@@ -26,22 +27,28 @@ WORDS = [
 
 
 @pytest.fixture(scope="module")
-def real_scorer(monkeypatch_module) -> Scorer:
-    monkeypatch_module.setenv("HF_HUB_OFFLINE", "1")
-    try:
-        return Scorer.from_pretrained(DEFAULT_MODEL, device="cpu")
-    except OSError:
+def real_scorer() -> Scorer:
+    # Asked of the cache directly: setting HF_HUB_OFFLINE here would be too
+    # late, huggingface_hub read it at import, and the test would download.
+    # Every file loading needs, not only the config: a partial cache (an
+    # interrupted download) would otherwise start a 1.5 GB download.
+    needed = ["config.json", "model.safetensors", "tokenizer.json"]
+    if not all(
+        isinstance(try_to_load_from_cache(DEFAULT_MODEL, file), str)
+        for file in needed
+    ):
         pytest.skip(f"{DEFAULT_MODEL} is not in the local cache")
-
-
-@pytest.fixture(scope="module")
-def monkeypatch_module():
-    with pytest.MonkeyPatch.context() as patch:
-        yield patch
+    return Scorer.from_pretrained(DEFAULT_MODEL, device="cpu")
 
 
 def test_gpt2_starts_sequences_with_endoftext(real_scorer):
     assert real_scorer.start_token == "<|endoftext|>"
+
+
+def test_the_model_commit_the_record_reports_is_known(real_scorer):
+    commit = getattr(real_scorer.model.config, "_commit_hash", None)
+    assert isinstance(commit, str)
+    assert commit
 
 
 def test_sentence_and_candidate_surprisals_match_the_reference(real_scorer):

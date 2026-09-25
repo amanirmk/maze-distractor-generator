@@ -4,18 +4,20 @@ maze-distractors items.csv distractors.csv
 maze-distractors items.csv items.txt --format ibex --report report.csv
 """
 
+import hashlib
 import json
 import logging
 import math
-from importlib import metadata
+from collections.abc import Sequence
+from importlib import metadata, resources
 from pathlib import Path
 from typing import Annotated
 
 import typer
 
-from maze_distractors.formats import WRITERS, Format, write_report
+from maze_distractors.formats import WRITERS, Format, write_csv, write_report
 from maze_distractors.generation import MISSING, Settings, generate
-from maze_distractors.items import read_sentences
+from maze_distractors.items import detect_layout, read_sentences
 from maze_distractors.surprisal import Scorer
 from maze_distractors.vocabulary import Vocabulary
 
@@ -28,19 +30,53 @@ app = typer.Typer(add_completion=False)
 
 
 def prepare_output_paths(
-    items_csv: Path, output: Path, report: Path | None
+    inputs: Sequence[Path], output: Path, report: Path | None
 ) -> None:
-    """Refuse a path that would overwrite the input or another output,
-    and make the directories now rather than after the slow part of the
-    run."""
+    """Refuse a path that would overwrite an input (the items or a word
+    list) or another output, and make the directories now rather than
+    after the slow part of the run."""
     outputs = [output] if report is None else [output, report]
     for file in outputs:
-        if file.resolve() == items_csv.resolve():
-            raise ValueError(f"{file} is the input file; it would be lost.")
+        if any(file.resolve() == given.resolve() for given in inputs):
+            raise ValueError(f"{file} is an input file; it would be lost.")
     if len({file.resolve() for file in outputs}) < len(outputs):
         raise ValueError(f"{report} is both the output and the report.")
     for file in outputs:
         file.parent.mkdir(parents=True, exist_ok=True)
+
+
+def _sha256(file: Path) -> str:
+    return hashlib.sha256(file.read_bytes()).hexdigest()
+
+
+PACKAGED_LISTS = (
+    "curated_word_list.txt",
+    "exclude.txt",
+    "proper_nouns.txt",
+    "noun_phrase_breakers.txt",
+)
+
+
+def _json_number(value: object) -> object:
+    if isinstance(value, float) and math.isinf(value):
+        return "inf" if value > 0 else "-inf"
+    return value
+
+
+def _code_commit() -> str | None:
+    """The commit the running code came from, as the installer recorded it
+    for a git install (``uvx --from git+...``, a pinned tag). None for any
+    other install (an editable clone, a local path): none is on record."""
+    try:
+        direct = json.loads(
+            metadata.distribution("maze-distractors").read_text(
+                "direct_url.json"
+            )
+            or "{}"
+        )
+    except (metadata.PackageNotFoundError, json.JSONDecodeError):
+        return None
+    return direct.get("vcs_info", {}).get("commit_id")
 
 
 @app.command()
@@ -85,8 +121,10 @@ def generate_distractors(
         typer.Option(
             exists=True,
             dir_okay=False,
-            help="Words a distractor may be, one per line. Default: the "
-            "curated list for English; otherwise wordfreq's small list, "
+            help="Words a distractor may be, one per line, replacing the "
+            "built-in list. For English the built-in exclusions and proper "
+            "nouns are still taken out, with a warning naming them. Default: "
+            "the curated list for English; otherwise wordfreq's small list, "
             "unscreened, with a warning.",
         ),
     ] = None,
@@ -116,6 +154,14 @@ def generate_distractors(
             "distractor may be; inf for any.",
         ),
     ] = _DEFAULTS.max_frequency_ratio,
+    min_candidates: Annotated[
+        int,
+        typer.Option(
+            min=1,
+            help="Words to try at least, widening the length match if "
+            "needed; closer lengths are tried first.",
+        ),
+    ] = _DEFAULTS.min_candidates,
     break_noun_phrases: Annotated[
         bool,
         typer.Option(
@@ -130,25 +176,48 @@ def generate_distractors(
     """Choose Maze distractors for the sentences of ITEMS_CSV and write them
     to OUTPUT. A JSON record of the run goes to standard output."""
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-    settings = Settings(
-        min_delta=min_delta,
-        min_abs=min_abs,
-        max_repeat=max_repeat,
-        max_frequency_ratio=max_frequency_ratio,
-        break_noun_phrases=break_noun_phrases,
-        seed=seed,
-    )
     try:
-        prepare_output_paths(items_csv, output, report)
+        settings = Settings(
+            min_delta=min_delta,
+            min_abs=min_abs,
+            max_repeat=max_repeat,
+            max_frequency_ratio=max_frequency_ratio,
+            min_candidates=min_candidates,
+            break_noun_phrases=break_noun_phrases,
+            seed=seed,
+        )
+        word_lists = [*([include] if include else []), *(exclude or ())]
+        prepare_output_paths([items_csv, *word_lists], output, report)
         sentences = read_sentences(items_csv)
         vocabulary = Vocabulary.load(language, include, exclude or ())
         scorer = Scorer.from_pretrained(
             model, revision=revision, device=device, bos_token=bos_token
         )
         distracted, chosen = generate(sentences, scorer, vocabulary, settings)
-        WRITERS[output_format](output, distracted)
-        if report is not None:
-            write_report(report, chosen)
+        # Both files are written beside their final names and moved into
+        # place together, so a failure never leaves new distractors next to
+        # an earlier run's report.
+        # Beside the file itself, not the name given: a symlink (into an
+        # Ibex project, say) is then written through rather than replaced.
+        finals = {path: path.resolve() for path in (output, report) if path}
+        parts = {
+            path: final.with_name(f".{final.name}.part")
+            for path, final in finals.items()
+        }
+        try:
+            if output_format is Format.CSV:
+                # An A-Maze input gets A-Maze's output layout back.
+                amaze = not detect_layout(items_csv).headed
+                write_csv(parts[output], distracted, amaze=amaze)
+            else:
+                WRITERS[output_format](parts[output], distracted)
+            if report is not None:
+                write_report(parts[report], chosen)
+            for path, part in parts.items():
+                part.replace(finals[path])
+        finally:
+            for part in parts.values():
+                part.unlink(missing_ok=True)
     except (ValueError, OSError) as error:
         # A bad path or input, an unknown model or token, or text the
         # tokenizer cannot split into words: the message says which.
@@ -157,9 +226,26 @@ def generate_distractors(
 
     record = {
         "maze_distractors": metadata.version("maze-distractors"),
+        # The version stays put between releases; the commit does not.
+        "maze_distractors_commit": _code_commit(),
+        # The built-in lists by content, since a clone can edit them.
+        "word_lists_sha256": {
+            name: hashlib.sha256(
+                (
+                    resources.files("maze_distractors") / "data" / name
+                ).read_bytes()
+            ).hexdigest()
+            for name in PACKAGED_LISTS
+        },
         # Its word list decides the vocabulary and the order words are tried.
         "wordfreq": metadata.version("wordfreq"),
+        # The scoring stack: a change in any of it can move a borderline
+        # choice, and `uvx` resolves the newest rather than the lockfile.
+        "transformers": metadata.version("transformers"),
+        "tokenizers": metadata.version("tokenizers"),
+        "torch": metadata.version("torch"),
         "items": str(items_csv),
+        "items_sha256": _sha256(items_csv),
         "output": str(output),
         "model": model,
         "model_commit": getattr(scorer.model.config, "_commit_hash", None),
@@ -168,11 +254,13 @@ def generate_distractors(
         "language": language,
         "include": None if include is None else str(include),
         "exclude": [str(file) for file in exclude or ()],
+        # The word lists by content, since a path can be edited in place.
+        "include_sha256": None if include is None else _sha256(include),
+        "exclude_sha256": [_sha256(file) for file in exclude or ()],
         "vocabulary_size": len(vocabulary),
-        # JSON has no infinity; "inf" is what the option takes.
+        # JSON has no infinity; "inf" and "-inf" are what the options take.
         "settings": {
-            name: "inf" if value == math.inf else value
-            for name, value in vars(settings).items()
+            name: _json_number(value) for name, value in vars(settings).items()
         },
         "positions": len(chosen),
         "positions_short_of_threshold": sum(
@@ -189,7 +277,7 @@ def generate_distractors(
             record["positions_without_distractor"],
             MISSING,
         )
-    typer.echo(json.dumps(record, indent=2))
+    typer.echo(json.dumps(record, indent=2, allow_nan=False))
 
 
 def main() -> None:
