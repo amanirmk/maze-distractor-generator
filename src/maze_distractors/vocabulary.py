@@ -146,7 +146,7 @@ class Vocabulary:
         list (words of at least one per million, screened for nothing) --
         minus those of every ``exclude`` file and, for English, the
         built-in exclusions and the words that are mainly proper nouns
-        (scripts/build_proper_noun_list.py; rerun it after editing the
+        (scripts/build_often_capitalized_list.py; rerun it after editing the
         curated list). Files hold one word per line."""
         if include is not None:
             words = _read_words(include)
@@ -165,7 +165,7 @@ class Vocabulary:
         built_in: set[str] = set()
         if is_english(language):
             built_in |= packaged_words("exclude.txt")
-            built_in |= packaged_words("proper_nouns.txt")
+            built_in |= packaged_words("often_capitalized.txt")
         excluded = set(built_in)
         for file in exclude:
             excluded |= _read_words(file)

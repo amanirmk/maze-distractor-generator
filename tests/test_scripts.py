@@ -19,7 +19,7 @@ def load(name):
 
 
 def test_a_users_word_list_never_replaces_the_shipped_proper_nouns(tmp_path):
-    build = load("build_proper_noun_list")
+    build = load("build_often_capitalized_list")
     words = tmp_path / "mine.txt"
     assert build._output_for(None, None) == build.LIST_FILE
     for out in (None, build.LIST_FILE, words):

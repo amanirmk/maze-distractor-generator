@@ -1,15 +1,16 @@
-"""Rebuild src/maze_distractors/data/proper_nouns.txt, the words left out
-of the vocabulary because they are mainly proper nouns ("josh", "oxford",
+"""Rebuild src/maze_distractors/data/often_capitalized.txt, the words left
+out of the vocabulary because they are mainly proper nouns ("josh", "oxford",
 "jack"): in lower case they are not the word a reader knows.
 
-    uv run python scripts/build_proper_noun_list.py
-    uv run python scripts/build_proper_noun_list.py --scores scores.csv
-    uv run python scripts/build_proper_noun_list.py --words w.txt --out n.txt
+    uv run python scripts/build_often_capitalized_list.py
+    uv run python scripts/build_often_capitalized_list.py --scores scores.csv
+    uv run python scripts/build_often_capitalized_list.py --words w.txt ...
 
 Every word of the curated list (or, with --words, of your own list, whose
 result goes to --out and is passed to maze-distractors with --exclude) is
 judged by
-maze_distractors.proper_nouns.is_likely_proper_noun, from how often SUBTLEX-US
+maze_distractors.capitalization.is_often_capitalized, from how often
+SUBTLEX-US
 has it capitalized and how much gpt2-medium prefers it so. The list is the
 output of that rule, not of anyone's judgement. SUBTLEX-US is downloaded
 unless --subtlex names a copy of its text version; it is not
@@ -30,10 +31,10 @@ from typing import Annotated
 
 import typer
 
-from maze_distractors.proper_nouns import (
+from maze_distractors.capitalization import (
     capital_preferences,
     capitalized_shares,
-    is_likely_proper_noun,
+    is_often_capitalized,
 )
 from maze_distractors.surprisal import Scorer
 from maze_distractors.vocabulary import Vocabulary, packaged_words
@@ -51,7 +52,8 @@ SUBTLEX_SHA256 = (
 )
 SUBTLEX_MEMBER = "SUBTLEXus74286wordstextversion.txt"
 LIST_FILE = (
-    Path(__file__).parents[1] / "src/maze_distractors/data/proper_nouns.txt"
+    Path(__file__).parents[1]
+    / "src/maze_distractors/data/often_capitalized.txt"
 )
 
 
@@ -133,7 +135,7 @@ def main(
     )
     scored = capital_preferences(scorer, words)
     listed = [
-        w for w in words if is_likely_proper_noun(shares.get(w), scored[w])
+        w for w in words if is_often_capitalized(shares.get(w), scored[w])
     ]
     out.write_text("\n".join(listed) + "\n", encoding="utf-8")
     typer.echo(f"{len(listed)} of {len(words)} words written to {out}")

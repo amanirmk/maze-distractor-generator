@@ -52,7 +52,7 @@ def _sha256(file: Path) -> str:
 PACKAGED_LISTS = (
     "curated_word_list.txt",
     "exclude.txt",
-    "proper_nouns.txt",
+    "often_capitalized.txt",
     "noun_phrase_breakers.txt",
 )
 

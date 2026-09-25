@@ -3,11 +3,11 @@ import statistics
 import pytest
 
 from conftest import reference_surprisal
-from maze_distractors.proper_nouns import (
+from maze_distractors.capitalization import (
     CARRIERS,
     capital_preferences,
     capitalized_shares,
-    is_likely_proper_noun,
+    is_often_capitalized,
 )
 
 
@@ -45,4 +45,4 @@ def test_the_model_score_is_bits_saved_by_the_capital_over_carriers(scorer):
     ],
 )
 def test_a_proper_noun_passes_both_signals(share, score, listed):
-    assert is_likely_proper_noun(share, score) is listed
+    assert is_often_capitalized(share, score) is listed

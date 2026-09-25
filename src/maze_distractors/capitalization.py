@@ -1,6 +1,6 @@
 """Whether a lowercase word is mainly a proper noun, from two signals that
-fail in different places. Used by scripts/build_proper_noun_list.py to
-build data/proper_nouns.txt.
+fail in different places. Used by scripts/build_often_capitalized_list.py
+to build data/often_capitalized.txt.
 
 The share of a word's occurrences that are capitalized in SUBTLEX-US
 (Brysbaert & New, 2009) is the direct measure, but it also runs high for
@@ -63,7 +63,7 @@ def capital_preferences(
     }
 
 
-def is_likely_proper_noun(
+def is_often_capitalized(
     capitalized_share: float | None, model_score: float
 ) -> bool:
     """``capitalized_share`` is None for a word SUBTLEX-US does not have."""

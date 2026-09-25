@@ -77,7 +77,7 @@ def test_a_run_writes_the_output_the_report_and_a_record(tmp_path, model_dir):
     assert set(record["word_lists_sha256"]) == {
         "curated_word_list.txt",
         "exclude.txt",
-        "proper_nouns.txt",
+        "often_capitalized.txt",
         "noun_phrase_breakers.txt",
     }
     assert record["exclude_sha256"] == [hashlib.sha256(b"garden\n").hexdigest()]
