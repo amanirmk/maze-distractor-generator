@@ -147,14 +147,17 @@ class Vocabulary:
         language: str = "en",
         include: Path | None = None,
         exclude: Sequence[Path] = (),
+        often_capitalized: Sequence[Path] = (),
     ) -> Self:
         """The words of ``include`` -- by default the curated list for
         English, and for another language, with a warning, wordfreq's small
         list (words of at least one per million, screened for nothing) --
         minus those of every ``exclude`` file and, for English, the
         built-in exclusions: A-Maze's, and the words readers know only as a
-        name or an abbreviation (scripts/build_exclusion_lists.py). Files
-        hold one word per line."""
+        name or an abbreviation (scripts/build_exclusion_lists.py). The
+        words of every ``often_capitalized`` file join the built-in list of
+        words held to their threshold capitalized too. Files hold one word
+        per line."""
         if include is not None:
             words = _read_words(include)
         elif is_english(language):
@@ -178,6 +181,8 @@ class Vocabulary:
         for file in exclude:
             excluded |= _read_words(file)
         vocabulary = cls(words - excluded, language)
+        for file in often_capitalized:
+            vocabulary.often_capitalized |= _read_words(file)
         if include is not None:
             _warn_of_left_out(
                 include,

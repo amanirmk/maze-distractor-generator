@@ -138,6 +138,17 @@ def generate_distractors(
             help="More words to exclude, one per line. Repeatable.",
         ),
     ] = None,
+    often_capitalized: Annotated[
+        list[Path] | None,
+        typer.Option(
+            "--often-capitalized",
+            exists=True,
+            dir_okay=False,
+            help="More words to score capitalized too, as the built-in "
+            "list's are, one per line (scripts/build_often_capitalized_"
+            "list.py --words makes one for an --include list). Repeatable.",
+        ),
+    ] = None,
     min_delta: Annotated[
         float, typer.Option(help="Bits above the target word's surprisal.")
     ] = _DEFAULTS.min_delta,
@@ -188,10 +199,16 @@ def generate_distractors(
             break_noun_phrases=break_noun_phrases,
             seed=seed,
         )
-        word_lists = [*([include] if include else []), *(exclude or ())]
+        word_lists = [
+            *([include] if include else []),
+            *(exclude or ()),
+            *(often_capitalized or ()),
+        ]
         prepare_output_paths([items_csv, *word_lists], output, report)
         sentences = read_sentences(items_csv)
-        vocabulary = Vocabulary.load(language, include, exclude or ())
+        vocabulary = Vocabulary.load(
+            language, include, exclude or (), often_capitalized or ()
+        )
         scorer = Scorer.from_pretrained(
             model, revision=revision, device=device, bos_token=bos_token
         )
@@ -256,9 +273,13 @@ def generate_distractors(
         "language": language,
         "include": None if include is None else str(include),
         "exclude": [str(file) for file in exclude or ()],
+        "often_capitalized": [str(file) for file in often_capitalized or ()],
         # The word lists by content, since a path can be edited in place.
         "include_sha256": None if include is None else _sha256(include),
         "exclude_sha256": [_sha256(file) for file in exclude or ()],
+        "often_capitalized_sha256": [
+            _sha256(file) for file in often_capitalized or ()
+        ],
         "vocabulary_size": len(vocabulary),
         # JSON has no infinity; "inf" and "-inf" are what the options take.
         "settings": {

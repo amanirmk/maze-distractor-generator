@@ -152,6 +152,15 @@ def test_often_capitalized_words_stay_in_and_mere_names_go(tmp_path):
     assert "garden" not in vocabulary.often_capitalized
     assert "oxford" in Vocabulary.load().words
     assert "josh" not in Vocabulary.load().words
+    # A list of one's own joins the check.
+    mine = tmp_path / "mine.txt"
+    mine.write_text("garden\n")
+    assert (
+        "garden"
+        in Vocabulary.load(
+            include=include, often_capitalized=[mine]
+        ).often_capitalized
+    )
     assert Vocabulary(["josh"], language="fr").often_capitalized == frozenset()
 
 

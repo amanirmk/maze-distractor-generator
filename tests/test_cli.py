@@ -72,6 +72,8 @@ def test_a_run_writes_the_output_the_report_and_a_record(tmp_path, model_dir):
     assert record["include"] is None
     assert record["exclude"] == [str(exclude)]
     assert record["include_sha256"] is None
+    assert record["often_capitalized"] == []
+    assert record["often_capitalized_sha256"] == []
     assert record["items_sha256"] == hashlib.sha256(ITEMS.encode()).hexdigest()
     assert "maze_distractors_commit" in record
     assert set(record["word_lists_sha256"]) == {
@@ -350,3 +352,31 @@ def test_the_commit_is_the_one_a_git_install_recorded(
         cli.metadata, "distribution", lambda _name: _Installed(direct_url)
     )
     assert cli._code_commit() == commit
+
+
+def test_a_list_of_ones_own_joins_the_capitalized_check(
+    tmp_path, model_dir, monkeypatch
+):
+    seen = {}
+    real = cli.Vocabulary.load
+
+    def spy(*args, **kwargs):
+        vocabulary = real(*args, **kwargs)
+        seen["often_capitalized"] = vocabulary.often_capitalized
+        return vocabulary
+
+    monkeypatch.setattr(cli.Vocabulary, "load", spy)
+    items = tmp_path / "items.csv"
+    items.write_text(ITEMS)
+    mine = tmp_path / "mine.txt"
+    mine.write_text("garden\n")
+    result = run(
+        items, tmp_path / "out.csv", "--model", model_dir, "--device", "cpu",
+        "--often-capitalized", mine,
+    )  # fmt: skip
+    assert "garden" in seen["often_capitalized"]
+    record = json.loads(result.stdout)
+    assert record["often_capitalized"] == [str(mine)]
+    assert record["often_capitalized_sha256"] == [
+        hashlib.sha256(b"garden\n").hexdigest()
+    ]
