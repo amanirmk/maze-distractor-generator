@@ -18,7 +18,7 @@ def load(name):
     return module
 
 
-def test_a_users_word_list_never_replaces_the_shipped_proper_nouns(tmp_path):
+def test_a_users_word_list_never_replaces_the_shipped_list(tmp_path):
     build = load("build_often_capitalized_list")
     words = tmp_path / "mine.txt"
     assert build._output_for(None, None) == build.LIST_FILE

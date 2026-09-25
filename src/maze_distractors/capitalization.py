@@ -1,6 +1,9 @@
-"""Whether a lowercase word is mainly a proper noun, from two signals that
-fail in different places. Used by scripts/build_often_capitalized_list.py
-to build data/often_capitalized.txt.
+"""Whether a lowercase word is often capitalized -- a name, a title, a
+place, a brand, a word fiction capitalizes ("the Academy") -- from two
+signals that fail in different places. Used by
+scripts/build_often_capitalized_list.py to build
+data/often_capitalized.txt, whose words are held to their surprisal
+threshold capitalized as well as shown (generation.py).
 
 The share of a word's occurrences that are capitalized in SUBTLEX-US
 (Brysbaert & New, 2009) is the direct measure, but it also runs high for

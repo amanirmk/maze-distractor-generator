@@ -4,7 +4,7 @@ import logging
 import math
 import re
 from collections import Counter
-from collections.abc import Callable, Collection, Sequence
+from collections.abc import Callable, Collection, Sequence, Set
 from dataclasses import dataclass
 
 from maze_distractors.items import Sentence
@@ -198,24 +198,34 @@ def _candidates(
 type _VariantKey = tuple[tuple[int, ...], Callable[[str], str]]
 
 
-def _variant_keys(target_word: _TargetWord) -> list[_VariantKey]:
+def _variant_keys(
+    target_word: _TargetWord, *, often_capitalized: bool = False
+) -> list[_VariantKey]:
     """A distractor shown capitalized is scored as shown and in lower case,
     and has to meet the threshold both ways: the model can take a capitalized
-    word for a name, which a reader who knows the word does not."""
+    word for a name, which a reader who knows the word does not. A word
+    that is often capitalized is scored capitalized too, whichever way it is
+    shown: a reader can take "josh" for the name, which the model, scoring
+    the lower case, does not."""
     tokens = target_word.scored.context.token_ids
     shown = (tokens, case_of(target_word.word))
-    return list(dict.fromkeys([shown, (tokens, str.lower)]))
+    keys = [shown, (tokens, str.lower)]
+    if often_capitalized:
+        keys.append((tokens, str.capitalize))
+    return list(dict.fromkeys(keys))
 
 
 def variants_for(
-    target_words: Sequence[_TargetWord],
+    target_words: Sequence[_TargetWord], *, often_capitalized: bool = False
 ) -> dict[_VariantKey, _ContextVariant]:
     """Sentences of an item often share their opening words. A candidate is
     scored once for each distinct context and capitalization, against the
     highest threshold set there."""
     variants: dict[_VariantKey, _ContextVariant] = {}
     for target_word in target_words:
-        for key in _variant_keys(target_word):
+        for key in _variant_keys(
+            target_word, often_capitalized=often_capitalized
+        ):
             threshold = max(
                 target_word.threshold,
                 variants[key].threshold if key in variants else -math.inf,
@@ -254,48 +264,69 @@ def score_in_variants(
     return result
 
 
+def _score_chunk(
+    scorer: Scorer,
+    variants_of: Callable[[str], Sequence[_ContextVariant]],
+    chunk: Sequence[str],
+) -> dict[str, list[float]]:
+    """Each word's surprisal in its variants, exact below their thresholds;
+    words held to the same variants are scored together."""
+    groups: dict[int, tuple[Sequence[_ContextVariant], list[str]]] = {}
+    for word in chunk:
+        variants = variants_of(word)
+        groups.setdefault(id(variants), (variants, []))[1].append(word)
+    scores = {}
+    for variants, words in groups.values():
+        scored = score_in_variants(scorer, variants, words, exactly=False)
+        scores.update(zip(words, scored, strict=True))
+    return scores
+
+
 def _search(
     scorer: Scorer,
-    variants: Sequence[_ContextVariant],
+    variants_of: Callable[[str], Sequence[_ContextVariant]],
     candidates: Sequence[str],
 ) -> tuple[str | None, list[float]]:
-    """The first candidate to meet the threshold in every variant, with its
-    exact surprisal in each. When none does, the one whose worst shortfall
-    is smallest, the earliest of equals; None and nans without candidates.
+    """The first candidate to meet the threshold in every one of its
+    variants (``variants_of`` it), with its exact surprisal in each. When
+    none does, the one whose worst shortfall is smallest, the earliest of
+    equals; None and an empty list without candidates.
 
     Candidates are scored in chunks that double, since a position is either
     settled within a few words or needs most of the vocabulary.
     """
 
-    def shortfall(surprisals: Sequence[float]) -> float:
+    def shortfall(word: str, surprisals: Sequence[float]) -> float:
         return max(
             variant.threshold - s
-            for variant, s in zip(variants, surprisals, strict=True)
+            for variant, s in zip(variants_of(word), surprisals, strict=True)
         )
 
     def score_exactly(word: str) -> list[float]:
-        return score_in_variants(scorer, variants, [word], exactly=True)[0]
+        return score_in_variants(
+            scorer, variants_of(word), [word], exactly=True
+        )[0]
 
     best, best_shortfall = None, math.inf
     start, size = 0, 16
     while start < len(candidates):
         chunk = candidates[start : start + size]
-        scores = score_in_variants(scorer, variants, chunk, exactly=False)
-        for word, surprisals in zip(chunk, scores, strict=True):
-            short = shortfall(surprisals)
+        scores = _score_chunk(scorer, variants_of, chunk)
+        for word in chunk:
+            short = shortfall(word, scores[word])
             if short <= _NEAR_MISS:
                 # Settled on the exact values that get reported, which can
                 # differ in the last digits from a bound or a batch -- in
                 # either direction, so a near miss is rechecked too.
                 confirmed = score_exactly(word)
-                short = shortfall(confirmed)
+                short = shortfall(word, confirmed)
                 if short <= 0:
                     return word, confirmed
             if short < best_shortfall:
                 best, best_shortfall = word, short
         start, size = start + size, size * 2
     if best is None:
-        return None, [math.nan] * len(variants)
+        return None, []
     return best, score_exactly(best)
 
 
@@ -307,16 +338,30 @@ def _choose(
     scorer: Scorer,
     target_words: Sequence[_TargetWord],
     candidates: Sequence[str],
+    often_capitalized: Set[str],
 ) -> tuple[str | None, list[float]]:
     """The distractor for ``target_words`` and its exact surprisal at each, or
-    None and nans when there is no candidate."""
-    variants = variants_for(target_words)
+    None and nans when there is no candidate. A candidate in
+    ``often_capitalized`` is held to its threshold capitalized too."""
+    variants = {
+        listed: variants_for(target_words, often_capitalized=listed)
+        for listed in (False, True)
+    }
+    as_lists = {listed: list(v.values()) for listed, v in variants.items()}
     distractor, surprisals = _search(
-        scorer, list(variants.values()), candidates
+        scorer,
+        lambda word: as_lists[word in often_capitalized],
+        candidates,
     )
-    by_variant = dict(zip(variants, surprisals, strict=True))
+    if distractor is None:
+        return None, [math.nan] * len(target_words)
+    listed = distractor in often_capitalized
+    by_variant = dict(zip(variants[listed], surprisals, strict=True))
     return distractor, [
-        min(by_variant[key] for key in _variant_keys(target_word))
+        min(
+            by_variant[key]
+            for key in _variant_keys(target_word, often_capitalized=listed)
+        )
         for target_word in target_words
     ]
 
@@ -357,7 +402,9 @@ def _distract_item(
             settings,
             avoid=used_here | worn_out | item_words,
         )
-        distractor, surprisals = _choose(scorer, target_words, candidates)
+        distractor, surprisals = _choose(
+            scorer, target_words, candidates, vocabulary.often_capitalized
+        )
         if distractor is not None:
             used_here.add(distractor)
             uses[distractor] += 1

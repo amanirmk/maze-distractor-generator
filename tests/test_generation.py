@@ -57,14 +57,15 @@ def bare(distractor):
     return strip_punctuation(distractor).lower()
 
 
-def scored_surprisal(scorer, context, distractor):
-    """A distractor counts for the lower of its surprisal as shown and in
-    lower case, without edge punctuation either way."""
+def scored_surprisal(scorer, context, distractor, often_capitalized):
+    """A distractor counts for the lowest of its surprisal as shown, in
+    lower case and, for a word often capitalized, capitalized, without edge
+    punctuation any way."""
     shown = strip_punctuation(distractor)
-    return min(
-        reference_surprisal(scorer, context, shown),
-        reference_surprisal(scorer, context, shown.lower()),
-    )
+    forms = [shown, shown.lower()]
+    if shown.lower() in often_capitalized:
+        forms.append(shown.capitalize())
+    return min(reference_surprisal(scorer, context, form) for form in forms)
 
 
 def exhaustive_choice(
@@ -72,7 +73,8 @@ def exhaustive_choice(
 ):
     """The specified choice, made without any shortcut: exact surprisal of
     every candidate at every target word, shown in that word's
-    capitalization and counted for the lower of that and lower case, in
+    capitalization and counted for the lowest of that, lower case and, for a
+    word often capitalized, capitalized, in
     candidate order, the length match widened a letter at a time until
     there are enough candidates."""
     thresholds = [
@@ -106,7 +108,12 @@ def exhaustive_choice(
     for candidate in candidates:
         shortfall = max(
             threshold
-            - scored_surprisal(scorer, context, case_of(word)(candidate))
+            - scored_surprisal(
+                scorer,
+                context,
+                case_of(word)(candidate),
+                vocabulary.often_capitalized,
+            )
             for threshold, (context, word) in zip(
                 thresholds, target_words, strict=True
             )
@@ -207,7 +214,10 @@ def test_the_report_holds_exact_surprisals_and_each_words_own_threshold(
         real = reference_surprisal(scorer, context, p.sentence.words[p.index])
         assert p.threshold == pytest.approx(max(30.0, real + 4.0), abs=1e-3)
         assert p.surprisal == pytest.approx(
-            scored_surprisal(scorer, context, p.distractor), abs=1e-3
+            scored_surprisal(
+                scorer, context, p.distractor, vocabulary.often_capitalized
+            ),
+            abs=1e-3,
         )
 
 

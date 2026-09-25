@@ -122,8 +122,8 @@ def generate_distractors(
             exists=True,
             dir_okay=False,
             help="Words a distractor may be, one per line, replacing the "
-            "built-in list. For English the built-in exclusions and proper "
-            "nouns are still taken out, with a warning naming them. Default: "
+            "built-in list. For English the built-in exclusions are still "
+            "taken out, with a warning naming them. Default: "
             "the curated list for English; otherwise wordfreq's small list, "
             "unscreened, with a warning.",
         ),

@@ -141,11 +141,16 @@ def test_the_default_list_is_curated_and_has_the_built_in_exclusions():
     assert "fuck" not in vocabulary._frequency
 
 
-def test_words_that_are_mainly_proper_nouns_are_left_out(tmp_path):
+def test_often_capitalized_words_stay_in(tmp_path):
+    # To be held to their threshold capitalized too (generation.py).
     include = tmp_path / "include.txt"
     include.write_text("garden\njosh\noxford\n")
-    assert Vocabulary.load(include=include).words == {"garden"}
-    assert "josh" not in Vocabulary.load().words
+    vocabulary = Vocabulary.load(include=include)
+    assert vocabulary.words == {"garden", "josh", "oxford"}
+    assert {"josh", "oxford"} <= vocabulary.often_capitalized
+    assert "garden" not in vocabulary.often_capitalized
+    assert "josh" in Vocabulary.load().words
+    assert Vocabulary(["josh"], language="fr").often_capitalized == frozenset()
 
 
 def test_noun_phrase_breakers_are_finite_verbs_and_function_words():
@@ -226,9 +231,9 @@ def test_another_language_falls_back_to_the_small_list_with_a_warning(
 def test_include_words_on_the_built_in_lists_are_named(tmp_path, caplog):
     include = tmp_path / "include.txt"
     include.write_text("garden\nfuck\njosh\n")
-    assert Vocabulary.load(include=include).words == {"garden"}
-    assert "2 of the 3 words" in caplog.text
-    assert "built-in exclusion or proper-noun lists: fuck, josh" in caplog.text
+    assert Vocabulary.load(include=include).words == {"garden", "josh"}
+    assert "1 of the 3 words" in caplog.text
+    assert "built-in exclusion lists: fuck" in caplog.text
     # A word the user excluded is not news.
     caplog.clear()
     exclude = tmp_path / "exclude.txt"

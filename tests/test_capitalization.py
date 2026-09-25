@@ -44,5 +44,5 @@ def test_the_model_score_is_bits_saved_by_the_capital_over_carriers(scorer):
         (None, 4.0, False),
     ],
 )
-def test_a_proper_noun_passes_both_signals(share, score, listed):
+def test_an_often_capitalized_word_passes_both_signals(share, score, listed):
     assert is_often_capitalized(share, score) is listed

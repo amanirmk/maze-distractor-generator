@@ -1,19 +1,18 @@
-"""Rebuild src/maze_distractors/data/often_capitalized.txt, the words left
-out of the vocabulary because they are mainly proper nouns ("josh", "oxford",
-"jack"): in lower case they are not the word a reader knows.
+"""Rebuild src/maze_distractors/data/often_capitalized.txt, the words held
+to their surprisal threshold capitalized as well as shown ("josh",
+"oxford", "academy"): shown in lower case, a reader may still take one for
+the name, which the model, scoring the lower case, does not.
 
     uv run python scripts/build_often_capitalized_list.py
     uv run python scripts/build_often_capitalized_list.py --scores scores.csv
     uv run python scripts/build_often_capitalized_list.py --words w.txt ...
 
 Every word of the curated list (or, with --words, of your own list, whose
-result goes to --out and is passed to maze-distractors with --exclude) is
-judged by
+result goes to --out) is judged by
 maze_distractors.capitalization.is_often_capitalized, from how often
-SUBTLEX-US
-has it capitalized and how much gpt2-medium prefers it so. The list is the
-output of that rule, not of anyone's judgement. SUBTLEX-US is downloaded
-unless --subtlex names a copy of its text version; it is not
+SUBTLEX-US has it capitalized and how much gpt2-medium prefers it so. The
+list is the output of that rule, not of anyone's judgement. SUBTLEX-US is
+downloaded unless --subtlex names a copy of its text version; it is not
 redistributed here.
 
 Brysbaert, M., & New, B. (2009). Moving beyond Kucera and Francis.
@@ -77,12 +76,12 @@ def _output_for(words_file: Path | None, out: Path | None) -> Path:
     if out is None or out.resolve() == LIST_FILE.resolve():
         raise typer.BadParameter(
             "with --words, give --out a file of your own: the shipped "
-            "proper-noun list is built from the curated words only",
+            "often-capitalized list is built from the curated words only",
             param_hint="--out",
         )
     if out.resolve() == words_file.resolve():
         raise typer.BadParameter(
-            "--out would replace the --words list with its proper nouns",
+            "--out would replace the --words list with part of itself",
             param_hint="--out",
         )
     return out
