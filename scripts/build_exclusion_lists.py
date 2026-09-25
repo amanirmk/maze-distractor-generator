@@ -1,6 +1,8 @@
 """Rebuild src/maze_distractors/data/first_names.txt and abbreviations.txt,
-the words of the curated list left out because readers know them only as
-a name ("josh", "tony") or an abbreviation ("pa", "rev"), not as a word.
+the words left out because readers know them only as a name ("josh",
+"tony") or an abbreviation ("pa", "rev", "mr"), not as a word. Every
+candidate is judged, not only the curated list's, so that the lists say in
+full what is left out, and hold for an --include list too.
 
     uv run python scripts/build_exclusion_lists.py
 
@@ -38,7 +40,6 @@ from maze_distractors.capitalization import (
     is_mainly_an_abbreviation,
     lowercase_per_million,
 )
-from maze_distractors.vocabulary import Vocabulary, packaged_words
 
 DATA = Path(__file__).parents[1] / "src/maze_distractors/data"
 CENSUS_URL = "https://www2.census.gov/topics/genealogy/1990surnames/"
@@ -108,9 +109,6 @@ def main(
         ),
     ] = None,
 ) -> None:
-    # The curated list as shipped, not Vocabulary.load(): the lists being
-    # rebuilt must not decide which words get judged.
-    words = sorted(Vocabulary(packaged_words("curated_word_list.txt")).words)
     with tempfile.TemporaryDirectory() as directory:
         subtlex_file = subtlex or download_subtlex(Path(directory))
         shares = capitalized_shares(subtlex_file)
@@ -119,14 +117,13 @@ def main(
     lists = {
         "first_names.txt": [
             w
-            for w in words
-            if w in names and is_mainly_a_name(shares.get(w), lowercase.get(w))
+            for w in sorted(names)
+            if is_mainly_a_name(shares.get(w), lowercase.get(w))
         ],
         "abbreviations.txt": [
             w
-            for w in words
-            if w in USPS_CODES | GPO_TITLES
-            and is_mainly_an_abbreviation(shares.get(w), lowercase.get(w))
+            for w in sorted(USPS_CODES | GPO_TITLES)
+            if is_mainly_an_abbreviation(shares.get(w), lowercase.get(w))
         ],
     }
     for file, listed in lists.items():
