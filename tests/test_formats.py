@@ -61,7 +61,7 @@ def test_jspsych_is_a_module_exporting_stimuli(tmp_path):
     assert stimulus == {
         "item_type": "sub_rel",
         "id": "3",
-        "sentence": 'The cat said "hi".',
+        "sent": 'The cat said "hi".',
         "distractor": 'x-x-x rug mild "os".',
         "labels": "pre noun verb",
     }

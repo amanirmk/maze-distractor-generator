@@ -52,12 +52,13 @@ def write_ibex(file: Path, distracted: Sequence[SentenceDistractors]) -> None:
 def write_jspsych(
     file: Path, distracted: Sequence[SentenceDistractors]
 ) -> None:
-    """A JavaScript module exporting ``stimuli``, for jsPsych."""
+    """A JavaScript module exporting ``stimuli``, for jsPsych, with the
+    ``sent`` and ``distractor`` keys the jspsych-maze plugin reads."""
     stimuli = [
         {
             "item_type": d.sentence.tag,
             "id": d.sentence.item,
-            "sentence": " ".join(d.sentence.words),
+            "sent": " ".join(d.sentence.words),
             "distractor": " ".join(d.distractors),
             "labels": " ".join(d.sentence.labels),
         }
