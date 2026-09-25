@@ -6,9 +6,12 @@ Automatically generate distractors to use in the Maze task (Freedman & Forster,
 This repo builds on
 [vboyce/maze-distractor-generator](https://github.com/vboyce/maze-distractor-generator),
 a modernized version of [A-Maze](https://github.com/vboyce/Maze) (Boyce,
-Futrell, & Levy, 2020). It is compatible with causal language models on
-HuggingFace and includes additional checks to prevent plausible distractors for
-English.
+Futrell, & Levy, 2020). It is intended and engineered for personal use in my
+experimental pipeline, but made available to everyone. The repo is compatible
+with causal language models on HuggingFace and includes additional checks to
+prevent plausible distractors for English. If you publish work using it,
+please cite Boyce, Futrell, & Levy (2020) for the general method, along with
+the language model you used for scoring.
 
 ## Quick start
 
