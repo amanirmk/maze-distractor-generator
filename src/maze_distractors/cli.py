@@ -53,6 +53,8 @@ PACKAGED_LISTS = (
     "curated_word_list.txt",
     "exclude.txt",
     "often_capitalized.txt",
+    "first_names.txt",
+    "abbreviations.txt",
     "noun_phrase_breakers.txt",
 )
 

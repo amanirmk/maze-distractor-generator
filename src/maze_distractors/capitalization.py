@@ -16,11 +16,26 @@ alone, by twice the margin.
 """
 
 import csv
+import hashlib
+import io
 import statistics
+import urllib.request
+import zipfile
 from collections.abc import Sequence
 from pathlib import Path
 
 from maze_distractors.surprisal import Scorer
+
+SUBTLEX_URL = (
+    "https://www.ugent.be/pp/experimentele-psychologie/en/research/"
+    "documents/subtlexus/subtlexus2.zip"
+)
+SUBTLEX_SHA256 = (
+    "67e595da1b399d2a21e25a1466a8d9f242f21a219c6bbbd3e089c4779ad83856"
+)
+SUBTLEX_MEMBER = "SUBTLEXus74286wordstextversion.txt"
+# Words in SUBTLEX-US, for counts per million.
+SUBTLEX_MILLIONS = 51.0
 
 # Capitalized more often than not, against 5-30% for an ordinary noun.
 MIN_CAPITALIZED_SHARE = 0.5
@@ -50,6 +65,29 @@ def capitalized_shares(subtlex_file: Path) -> dict[str, float]:
         }
 
 
+def download_subtlex(directory: Path) -> Path:
+    """SUBTLEX-US's text version, downloaded into ``directory`` and checked
+    against the copy the shipped lists were built from."""
+    with urllib.request.urlopen(SUBTLEX_URL, timeout=60) as response:
+        data = response.read()
+    if hashlib.sha256(data).hexdigest() != SUBTLEX_SHA256:
+        raise SystemExit(
+            f"{SUBTLEX_URL} is not the file the lists were built from."
+        )
+    archive = zipfile.ZipFile(io.BytesIO(data))
+    return Path(archive.extract(SUBTLEX_MEMBER, directory))
+
+
+def lowercase_per_million(subtlex_file: Path) -> dict[str, float]:
+    """For each word of SUBTLEX-US's text version, how often it occurs in
+    lower case, per million words: how often it is an ordinary word."""
+    with subtlex_file.open(encoding="latin-1", newline="") as f:
+        return {
+            row["Word"].lower(): int(row["FREQlow"]) / SUBTLEX_MILLIONS
+            for row in csv.DictReader(f, delimiter="\t")
+        }
+
+
 def capital_preferences(
     scorer: Scorer, words: Sequence[str]
 ) -> dict[str, float]:
@@ -75,4 +113,43 @@ def is_often_capitalized(
     return (
         capitalized_share >= MIN_CAPITALIZED_SHARE
         and model_score >= MIN_MODEL_SCORE
+    )
+
+
+# A first name is left out when readers meet it almost only as a name:
+# capitalized nearly always, and in lower case less than once per million
+# words. "josh", "tony" and "terry" go; "sue", "drew", "eve", "jack" and
+# "frank", ordinary words too, stay.
+NAME_MIN_CAPITALIZED_SHARE = 0.95
+NAME_MAX_LOWERCASE_PER_MILLION = 1.0
+# An abbreviation is left out when it is capitalized more often than not
+# and rare in lower case: "pa" and "rev" go; "ma" (mother), "rep", "oh",
+# "in" and "or" stay.
+ABBREVIATION_MIN_CAPITALIZED_SHARE = 0.5
+ABBREVIATION_MAX_LOWERCASE_PER_MILLION = 10.0
+
+
+def is_mainly_a_name(
+    capitalized_share: float | None, lowercase: float | None
+) -> bool:
+    """For a word that is a common first name: whether readers know it
+    only as the name. A word SUBTLEX-US lacks is not left out."""
+    if capitalized_share is None or lowercase is None:
+        return False
+    return (
+        capitalized_share >= NAME_MIN_CAPITALIZED_SHARE
+        and lowercase < NAME_MAX_LOWERCASE_PER_MILLION
+    )
+
+
+def is_mainly_an_abbreviation(
+    capitalized_share: float | None, lowercase: float | None
+) -> bool:
+    """For a word that is a state code or an abbreviated title: whether
+    readers know it only as the abbreviation."""
+    if capitalized_share is None or lowercase is None:
+        return False
+    return (
+        capitalized_share >= ABBREVIATION_MIN_CAPITALIZED_SHARE
+        and lowercase < ABBREVIATION_MAX_LOWERCASE_PER_MILLION
     )

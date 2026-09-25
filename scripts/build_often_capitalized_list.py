@@ -20,11 +20,7 @@ Behavior Research Methods, 41(4), 977-990.
 """
 
 import csv
-import hashlib
-import io
 import tempfile
-import urllib.request
-import zipfile
 from pathlib import Path
 from typing import Annotated
 
@@ -33,6 +29,7 @@ import typer
 from maze_distractors.capitalization import (
     capital_preferences,
     capitalized_shares,
+    download_subtlex,
     is_often_capitalized,
 )
 from maze_distractors.surprisal import Scorer
@@ -42,29 +39,10 @@ from maze_distractors.vocabulary import Vocabulary, packaged_words
 # change to the rule.
 MODEL = "openai-community/gpt2-medium"
 MODEL_REVISION = "6dcaa7a952f72f9298047fd5137cd6e4f05f41da"
-SUBTLEX_URL = (
-    "https://www.ugent.be/pp/experimentele-psychologie/en/research/"
-    "documents/subtlexus/subtlexus2.zip"
-)
-SUBTLEX_SHA256 = (
-    "67e595da1b399d2a21e25a1466a8d9f242f21a219c6bbbd3e089c4779ad83856"
-)
-SUBTLEX_MEMBER = "SUBTLEXus74286wordstextversion.txt"
 LIST_FILE = (
     Path(__file__).parents[1]
     / "src/maze_distractors/data/often_capitalized.txt"
 )
-
-
-def download_subtlex(directory: Path) -> Path:
-    with urllib.request.urlopen(SUBTLEX_URL, timeout=60) as response:
-        data = response.read()
-    if hashlib.sha256(data).hexdigest() != SUBTLEX_SHA256:
-        raise SystemExit(
-            f"{SUBTLEX_URL} is not the file the list was built from."
-        )
-    archive = zipfile.ZipFile(io.BytesIO(data))
-    return Path(archive.extract(SUBTLEX_MEMBER, directory))
 
 
 def _output_for(words_file: Path | None, out: Path | None) -> Path:

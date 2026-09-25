@@ -141,15 +141,17 @@ def test_the_default_list_is_curated_and_has_the_built_in_exclusions():
     assert "fuck" not in vocabulary._frequency
 
 
-def test_often_capitalized_words_stay_in(tmp_path):
-    # To be held to their threshold capitalized too (generation.py).
+def test_often_capitalized_words_stay_in_and_mere_names_go(tmp_path):
+    # Often capitalized, to be held to their threshold capitalized too
+    # (generation.py); known only as a name or an abbreviation, left out.
     include = tmp_path / "include.txt"
-    include.write_text("garden\njosh\noxford\n")
+    include.write_text("garden\noxford\nacademy\njosh\ntony\npa\nrev\nsue\n")
     vocabulary = Vocabulary.load(include=include)
-    assert vocabulary.words == {"garden", "josh", "oxford"}
-    assert {"josh", "oxford"} <= vocabulary.often_capitalized
+    assert vocabulary.words == {"garden", "oxford", "academy", "sue"}
+    assert {"oxford", "academy"} <= vocabulary.often_capitalized
     assert "garden" not in vocabulary.often_capitalized
-    assert "josh" in Vocabulary.load().words
+    assert "oxford" in Vocabulary.load().words
+    assert "josh" not in Vocabulary.load().words
     assert Vocabulary(["josh"], language="fr").often_capitalized == frozenset()
 
 
@@ -230,10 +232,10 @@ def test_another_language_falls_back_to_the_small_list_with_a_warning(
 
 def test_include_words_on_the_built_in_lists_are_named(tmp_path, caplog):
     include = tmp_path / "include.txt"
-    include.write_text("garden\nfuck\njosh\n")
-    assert Vocabulary.load(include=include).words == {"garden", "josh"}
-    assert "1 of the 3 words" in caplog.text
-    assert "built-in exclusion lists: fuck" in caplog.text
+    include.write_text("garden\nfuck\njosh\npa\n")
+    assert Vocabulary.load(include=include).words == {"garden"}
+    assert "3 of the 4 words" in caplog.text
+    assert "built-in exclusion lists: fuck, josh, pa" in caplog.text
     # A word the user excluded is not news.
     caplog.clear()
     exclude = tmp_path / "exclude.txt"

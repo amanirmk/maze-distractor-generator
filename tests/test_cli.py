@@ -78,6 +78,8 @@ def test_a_run_writes_the_output_the_report_and_a_record(tmp_path, model_dir):
         "curated_word_list.txt",
         "exclude.txt",
         "often_capitalized.txt",
+        "first_names.txt",
+        "abbreviations.txt",
         "noun_phrase_breakers.txt",
     }
     assert record["exclude_sha256"] == [hashlib.sha256(b"garden\n").hexdigest()]

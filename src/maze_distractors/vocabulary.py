@@ -127,10 +127,10 @@ class Vocabulary:
         )
         # Words held to their threshold capitalized as well as shown;
         # English only (scripts/build_often_capitalized_list.py).
-        self.often_capitalized = (
+        self.often_capitalized: set[str] = (
             packaged_words("often_capitalized.txt")
             if is_english(language)
-            else frozenset()
+            else set()
         )
         frequencies = _frequencies(language)
         self._frequency = {
@@ -151,8 +151,10 @@ class Vocabulary:
         """The words of ``include`` -- by default the curated list for
         English, and for another language, with a warning, wordfreq's small
         list (words of at least one per million, screened for nothing) --
-        minus those of every ``exclude`` file and, for English, A-Maze's
-        built-in exclusions. Files hold one word per line."""
+        minus those of every ``exclude`` file and, for English, the
+        built-in exclusions: A-Maze's, and the words readers know only as a
+        name or an abbreviation (scripts/build_exclusion_lists.py). Files
+        hold one word per line."""
         if include is not None:
             words = _read_words(include)
         elif is_english(language):
@@ -170,6 +172,8 @@ class Vocabulary:
         built_in: set[str] = set()
         if is_english(language):
             built_in |= packaged_words("exclude.txt")
+            built_in |= packaged_words("first_names.txt")
+            built_in |= packaged_words("abbreviations.txt")
         excluded = set(built_in)
         for file in exclude:
             excluded |= _read_words(file)
