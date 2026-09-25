@@ -94,7 +94,7 @@ def main(
     out = _output_for(words_file, out)
     # The curated list as shipped, not Vocabulary.load(): the list being
     # rebuilt must not decide which words get judged. Or a user's own
-    # list, for --include, whose result they pass with --exclude.
+    # list, for --include, whose result they pass with --often-capitalized.
     source = (
         set(words_file.read_text(encoding="utf-8-sig").split())
         if words_file
