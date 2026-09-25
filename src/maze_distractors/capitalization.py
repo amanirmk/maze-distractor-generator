@@ -37,8 +37,11 @@ SUBTLEX_MEMBER = "SUBTLEXus74286wordstextversion.txt"
 # Words in SUBTLEX-US, for counts per million.
 SUBTLEX_MILLIONS = 51.0
 
-# Capitalized more often than not, against 5-30% for an ordinary noun.
-MIN_CAPITALIZED_SHARE = 0.5
+# Capitalized in at least 40% of occurrences, clearly above the 5-30% of
+# an ordinary noun. The list only adds a check, so a word that is also
+# ordinary costs little; one read as a name and missed costs more ("ma",
+# 46%, was chosen where "Ma" was no surprise).
+MIN_CAPITALIZED_SHARE = 0.4
 # The model finds the capitalized form at least 8 times as likely.
 MIN_MODEL_SCORE = 3.0
 # For a word SUBTLEX-US lacks, the model has to be twice as sure.

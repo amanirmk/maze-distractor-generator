@@ -45,6 +45,8 @@ def test_the_model_score_is_bits_saved_by_the_capital_over_carriers(scorer):
     ("share", "score", "listed"),
     [
         (0.97, 4.9, True),  # jack
+        (0.46, 4.6, True),  # ma: a word too, but read as the name
+        (0.35, 4.0, False),
         (0.24, 5.6, False),  # sponge: the model alone would list it
         (0.98, 0.2, False),  # additionally: capitalized for opening sentences
         (None, 7.6, True),  # waldo: not in SUBTLEX-US, the model is sure
