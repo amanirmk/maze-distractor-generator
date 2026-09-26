@@ -76,7 +76,8 @@ distractor.
   `openai-community/gpt2-medium`); `--revision` pins its commit.
 - `--exclude FILE` (repeatable) keeps more words out. `--include FILE` replaces
   the built-in word list with your own; for English, the built-in exclusion
-  and proper-noun lists ([Vocabulary](#vocabulary)) still apply to it.
+  and often-capitalized lists ([Vocabulary](#vocabulary)) still apply to it.
+  `--often-capitalized FILE` (repeatable) adds words to score capitalized too.
 - `--seed` controls which acceptable distractors are chosen. The same input,
   settings, model and library versions (all in the run record) reproduce the
   same distractors, up to floating point differences between machines. Choices
@@ -139,9 +140,12 @@ grammatical distractors.
    not for other models.
 7. A distractor must meet the threshold in every context it appears in: all
    positions in all sentences of the item that share its label. When the
-   distractor would be capitalized (to match a target word), it must also meet
-   the threshold when capitalized—a conservative choice which matters most for
-   words that can function as names.
+   distractor would be capitalized (to match a target word), it must meet the
+   threshold both capitalized and in lowercase, whereas A-Maze scores only in
+   lowercase. A word that is often capitalized (see [Vocabulary](#vocabulary))
+   must meet it capitalized too, even when shown in lowercase, since a reader
+   may take "grace" for the name Grace. Both are conservative choices which
+   matter most for words that can function as names.
 8. We walk through the sorted words and take the first that meets every
    threshold. If none do, we take the one that comes closest and report the
    position. We never widen the tolerated ranges to reach the surprisal
@@ -160,35 +164,58 @@ had scored every candidate in full.
 
 Distractors come from A-Maze's curated list of 19k English words, already
 screened for offensive and sensitive terms. Frequencies come from
-[wordfreq](https://github.com/rspeer/wordfreq). Three more lists sit beside the
-curated one under `src/maze_distractors/data/`. The last two are built by rule
-rather than by hand, and the scripts under `scripts/` rebuild them:
+[wordfreq](https://github.com/rspeer/wordfreq). Five more lists sit beside the
+curated one under `src/maze_distractors/data/`. The first is taken from A-Maze
+and the other four are built via heuristics using the files in `scripts/`.
 
-- `exclude.txt` holds A-Maze's excluded words, which are left out. None of them
-  are on the curated list, so it only matters for an `--include` list (below).
-- `proper_nouns.txt` holds words that are mainly proper nouns ("josh", "oxford",
-  "jack"), which are also left out, since in lower case they are not the word a
-  reader knows. A word makes the list if SUBTLEX-US (Brysbaert & New, 2009) has
-  it capitalized in at least half its occurrences and `gpt2-medium` prefers it
-  capitalized mid-sentence by at least 3 bits (6 bits, if SUBTLEX-US lacks the
-  word). If you edit the curated list, please rerun
-  `uv run python scripts/build_proper_noun_list.py`.
+- `exclude.txt` holds A-Maze's wide-ranging list of words to exclude, which we
+  always leave out when the language is set to English. None of them are on the
+  curated list, so it only matters for an `--include` list (see
+  **Your own list** below).
+- `often_capitalized.txt` holds words that are frequently capitalized: names,
+  places, titles, brands ("oxford", "professor", "academy"). A word makes the
+  list if SUBTLEX-US (Brysbaert & New, 2009) has it capitalized in at least 40%
+  of its occurrences and `gpt2-medium` prefers it capitalized mid-sentence by
+  at least 3 bits (6 bits, if SUBTLEX-US lacks the word). This list is used to
+  enforce checking the surprisal of the capitalized version (step 7 above),
+  since (a) the model may find them surprising in lowercase for the case alone
+  and (b) capitalized may better reflect how people actually interpret the word.
+- `first_names.txt` holds every first name in the 1990 US Census lists that is
+  capitalized at least 95% of the time in SUBTLEX-US and occurs in lowercase
+  less than once per million words. In contrast to the above list, these are
+  clearly names and we exclude them as distractors. Words that are also
+  ordinary words, like "sue" and "mark", still survive.
+- `abbreviations.txt` holds every USPS state or territory code, as well as
+  every abbreviated title in the US Government Publishing Office's
+  *Style Manual*, that is capitalized at least 50% of the time in SUBTLEX-US
+  and occurs in lowercase less than 10 per million words. These abbreviations
+  are also excluded from being used as distractors.
 - `noun_phrase_breakers.txt` holds the words we allow straight after a
   determiner (step 2), judged from WordNet and lemminflect over every English
-  word wordfreq knows. Rebuild with
-  `uv run --group lists python scripts/build_noun_phrase_breakers.py`.
+  word wordfreq knows.
 
-**Your own list.** With `--include`, an English list still has the exclusions
-and proper nouns taken out, with a warning naming the first few words removed.
-Neither list was made for your words, though: the exclusions are A-Maze's fixed
-set, and the proper nouns were judged among the curated words only. To screen
-your own list for proper nouns, run `uv run python
-scripts/build_proper_noun_list.py --words your_list.txt --out
-your_proper_nouns.txt` in a clone and pass the result with `--exclude`; please
-screen it for sensitive words yourself.
+Both `first_names.txt` and `abbreviations.txt` can be rebuilt with
+`uv run python scripts/build_exclusion_lists.py`. `often_capitalized.txt` is
+rebuilt with `uv run python scripts/build_often_capitalized_list.py`, and
+`noun_phrase_breakers.txt` is rebuilt with
+`uv run --group lists python scripts/build_noun_phrase_breakers.py`.
+
+If you edit the curated word list, please rerun
+`uv run python scripts/build_often_capitalized_list.py` as it is created by
+checking the words in that list.
+
+**Your own list.** If you use your own word list via `--include`, and the
+language is English, our vocabulary checks will still apply. Any words in
+`exclude.txt`, `first_names.txt`, or `abbreviations.txt` are removed, and the
+words in `often_capitalized.txt` are tested with capitalization. However, the
+capitalization list is built only from the curated word list, so any words in
+`--include` would need to be checked using
+`uv run python scripts/build_often_capitalized_list.py --words your_list.txt
+--out your_capitalized.txt` and then passed to the distractor generator with
+`--often-capitalized your_capitalized.txt`.
 
 No list anticipates everything. We recommend always screening the output
-distractors for your own considerations.
+distractors for sensitive words and any other considerations.
 
 ## Development
 
