@@ -42,8 +42,8 @@ position. Setting labels is important for sharing distractors where it matters:
 
 ```
 type,item_num,sentence,labels
-sub_rel,3,The cat who the dog scared hid in a box.,pre_1 pre_2 who art noun verb main_verb post_1 post_2 post_3
-obj_rel,3,The dog who scared the cat sniffed around the couch.,pre_1 pre_2 who verb art noun main_verb post_1 post_2 post_3
+obj_rel,3,The cat who the dog scared hid in a box.,pre_1 pre_2 who art noun verb main_verb post_1 post_2 post_3
+sub_rel,3,The dog who scared the cat sniffed around the couch.,pre_1 pre_2 who verb art noun main_verb post_1 post_2 post_3
 ```
 
 For backwards compatibility, the A-Maze input format (no header, columns in
@@ -210,7 +210,7 @@ language is English, our vocabulary checks will still apply. Any words in
 `exclude.txt`, `first_names.txt`, or `abbreviations.txt` are removed, and the
 words in `often_capitalized.txt` are tested with capitalization. However, the
 capitalization list is built only from the curated word list, so any words in
-`--include` would need to be checked using
+`--include` would need to be checked in a clone using
 `uv run python scripts/build_often_capitalized_list.py --words your_list.txt
 --out your_capitalized.txt` and then passed to the distractor generator with
 `--often-capitalized your_capitalized.txt`.
