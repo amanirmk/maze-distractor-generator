@@ -1,6 +1,6 @@
 [project]
 name = "maze-distractors"
-version = "1.0.2"
+version = "1.1.0"
 description = "Generate Maze-task distractor words that a causal language model finds surprising in context."
 readme = "README.md"
 license = "GPL-3.0-only"
