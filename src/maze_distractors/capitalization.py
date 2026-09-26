@@ -13,6 +13,12 @@ but it cannot tell "jack" from "sponge": wherever a bare name fits, a bare
 singular noun does not, so the lower-case form loses for grammar's sake.
 A word has to pass both; one SUBTLEX-US lacks has to pass the model's test
 alone, by twice the margin.
+
+Also whether a word is one readers know only as a name or an abbreviation,
+from SUBTLEX-US alone: scripts/build_exclusion_lists.py uses those rules
+to build data/first_names.txt and data/abbreviations.txt, whose words are
+left out of the vocabulary. Both scripts share the SUBTLEX-US helpers
+here, so a change to them calls for rebuilding all three lists.
 """
 
 import csv

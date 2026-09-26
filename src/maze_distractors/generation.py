@@ -73,8 +73,8 @@ class ChosenDistractor:
     index: int
     distractor: str
     threshold: float
-    # Exact, in bits; the lower of as shown and in lower case; nan for
-    # MISSING.
+    # Exact, in bits; the lowest of as shown, in lower case and, for a
+    # word often capitalized, capitalized; nan for MISSING.
     surprisal: float
 
     @property

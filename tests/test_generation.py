@@ -305,11 +305,12 @@ def test_distractors_follow_the_words_punctuation_and_capitals(
     assert all(len(d.distractors) == len(d.sentence.words) for d in distracted)
 
 
-def test_a_capitalized_distractor_counts_for_the_lower_of_both_forms(
+def test_a_capitalized_distractor_counts_for_the_lowest_of_its_forms(
     scorer, vocabulary
 ):
     # One label, one context, three capitalizations: one distractor, and at
-    # each target word the lower surprisal of the form shown and lower case.
+    # each target word the lowest surprisal of the form shown, lower case
+    # and, for a word often capitalized, capitalized.
     sentences = [
         sentence("a", "1", "We saw boston today."),
         sentence("b", "1", "We saw Boston today."),
@@ -324,8 +325,13 @@ def test_a_capitalized_distractor_counts_for_the_lower_of_both_forms(
     surprisals = [p.surprisal for p in positions if p.index == 2]
     as_shown = [reference_surprisal(scorer, "We saw", d) for d in shown]
     assert len(set(as_shown)) == 3
-    for form, surprisal in zip(as_shown, surprisals, strict=True):
-        assert surprisal == pytest.approx(min(form, as_shown[0]), abs=1e-3)
+    for form, surprisal in zip(shown, surprisals, strict=True):
+        assert surprisal == pytest.approx(
+            scored_surprisal(
+                scorer, "We saw", form, vocabulary.often_capitalized
+            ),
+            abs=1e-3,
+        )
     # The search was held to the lowest of them all.
     assert min(surprisals) == pytest.approx(min(as_shown), abs=1e-3)
 
