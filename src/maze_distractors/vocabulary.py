@@ -157,7 +157,9 @@ class Vocabulary:
         name or an abbreviation (scripts/build_exclusion_lists.py). The
         words of every ``often_capitalized`` file join the built-in list of
         words held to their threshold capitalized too. Files hold one word
-        per line."""
+        per line; an ``exclude`` or ``often_capitalized`` word stands for
+        its lowercase form ("Grace" for "grace"), the only form the
+        vocabulary holds."""
         if include is not None:
             words = _read_words(include)
         elif is_english(language):
@@ -179,10 +181,12 @@ class Vocabulary:
             built_in |= packaged_words("abbreviations.txt")
         excluded = set(built_in)
         for file in exclude:
-            excluded |= _read_words(file)
+            excluded |= {word.lower() for word in _read_words(file)}
         vocabulary = cls(words - excluded, language)
         for file in often_capitalized:
-            vocabulary.often_capitalized |= _read_words(file)
+            vocabulary.often_capitalized |= {
+                word.lower() for word in _read_words(file)
+            }
         if include is not None:
             _warn_of_left_out(
                 include,

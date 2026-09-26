@@ -125,7 +125,8 @@ def test_the_order_is_fixed_by_the_key():
 
 def test_excluding_a_word_leaves_the_order_of_the_rest(tmp_path):
     extra = tmp_path / "extra.txt"
-    extra.write_text("\ufeffcastle\nbridge\n")  # with a byte-order mark
+    # With a byte-order mark, and a word written capitalized.
+    extra.write_text("\ufeffcastle\nBridge\n")
     before = Vocabulary.load().candidates(["garden"], set(), "key")
     after = Vocabulary.load(exclude=[extra]).candidates(
         ["garden"], set(), "key"
@@ -152,9 +153,9 @@ def test_often_capitalized_words_stay_in_and_mere_names_go(tmp_path):
     assert "garden" not in vocabulary.often_capitalized
     assert "oxford" in Vocabulary.load().words
     assert "josh" not in Vocabulary.load().words
-    # A list of one's own joins the check.
+    # A list of one's own joins the check, in whatever case.
     mine = tmp_path / "mine.txt"
-    mine.write_text("garden\n")
+    mine.write_text("Garden\n")
     assert (
         "garden"
         in Vocabulary.load(
