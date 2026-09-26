@@ -60,9 +60,10 @@ Distractors take on their word's punctuation and capitalization.
 For backwards compatibility, when given input formatted for A-Maze, the `csv`
 output will also follow the A-Maze format.
 
-**Checking the result.** `--report FILE` writes one row per word after the
-first (which gets no distractor): the surprisal threshold the target word set,
-the distractor's surprisal, and whether it met the threshold. Positions that
+**Checking the result.** `--report FILE` writes a CSV with one row per word
+after the first (which gets no distractor): the target word's and the
+distractor's frequencies (per million words), the surprisal threshold the
+target word set, the distractor's surprisal, and whether it met the threshold. Positions that
 fell short are logged as warnings. If no word of the vocabulary could be tried
 at a position at all (possible with a small `--include` list), it shows
 `NO-DISTRACTOR` and issues a warning. Every run prints a JSON record to standard

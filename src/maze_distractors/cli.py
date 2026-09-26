@@ -231,7 +231,7 @@ def generate_distractors(
             else:
                 WRITERS[output_format](parts[output], distracted)
             if report is not None:
-                write_report(parts[report], chosen)
+                write_report(parts[report], chosen, language)
             for path, part in parts.items():
                 part.replace(finals[path])
         finally:

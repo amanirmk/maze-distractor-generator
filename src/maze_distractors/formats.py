@@ -6,7 +6,14 @@ from collections.abc import Callable, Sequence
 from enum import StrEnum
 from pathlib import Path
 
-from maze_distractors.generation import ChosenDistractor, SentenceDistractors
+import wordfreq
+
+from maze_distractors.generation import (
+    MISSING,
+    ChosenDistractor,
+    SentenceDistractors,
+)
+from maze_distractors.punctuation import strip_punctuation
 
 
 def write_csv(
@@ -83,9 +90,17 @@ WRITERS: dict[Format, Callable[[Path, Sequence[SentenceDistractors]], None]] = {
 }
 
 
-def write_report(file: Path, chosen: Sequence[ChosenDistractor]) -> None:
-    """One row per target word: the surprisal threshold it set, the
-    distractor's surprisal there, and whether it met it."""
+def _per_million(word: str, language: str) -> str:
+    return f"{wordfreq.word_frequency(strip_punctuation(word), language) * 1e6:.3f}"
+
+
+def write_report(
+    file: Path, chosen: Sequence[ChosenDistractor], language: str = "en"
+) -> None:
+    """One row per target word: its frequency and the distractor's (per
+    million words, from wordfreq for ``language``), the surprisal
+    threshold it set, the distractor's surprisal there, and whether it met
+    it."""
     with file.open("w", encoding="utf-8", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(
@@ -96,6 +111,8 @@ def write_report(file: Path, chosen: Sequence[ChosenDistractor]) -> None:
                 "position",
                 "word",
                 "distractor",
+                "word_frequency",
+                "distractor_frequency",
                 "threshold",
                 "surprisal",
                 "met",
@@ -110,6 +127,10 @@ def write_report(file: Path, chosen: Sequence[ChosenDistractor]) -> None:
                     p.index,
                     p.sentence.words[p.index],
                     p.distractor,
+                    _per_million(p.sentence.words[p.index], language),
+                    ""
+                    if p.distractor == MISSING
+                    else _per_million(p.distractor, language),
                     f"{p.threshold:.6f}",
                     f"{p.surprisal:.6f}",
                     p.met,

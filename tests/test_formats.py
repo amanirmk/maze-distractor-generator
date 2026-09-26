@@ -3,6 +3,8 @@ import json
 import math
 import re
 
+import wordfreq
+
 from maze_distractors.formats import (
     write_csv,
     write_ibex,
@@ -85,11 +87,25 @@ def test_the_report_has_a_row_per_position(tmp_path):
         "position": "1",
         "word": "cat",
         "distractor": "rug",
+        "word_frequency": f"{wordfreq.word_frequency('cat', 'en') * 1e6:.3f}",
+        "distractor_frequency": f"{wordfreq.word_frequency('rug', 'en') * 1e6:.3f}",
         "threshold": "25.000000",
         "surprisal": "27.123400",
         "met": "True",
     }
     assert rows[1]["met"] == "False"
+    # The frequency of the word itself, without its edge punctuation.
+    write_report(
+        file,
+        [
+            ChosenDistractor(
+                SENTENCE, 1, '"rug".', threshold=25.0, surprisal=26.0
+            )
+        ],
+    )
+    with file.open(newline="") as f:
+        (row,) = csv.DictReader(f)
+    assert row["distractor_frequency"] == rows[0]["distractor_frequency"]
 
 
 def test_a_position_without_a_distractor_is_reported_as_such(tmp_path):
@@ -101,6 +117,7 @@ def test_a_position_without_a_distractor_is_reported_as_such(tmp_path):
     with file.open(newline="") as f:
         (row,) = csv.DictReader(f)
     assert row["distractor"] == MISSING
+    assert row["distractor_frequency"] == ""
     assert row["surprisal"] == "nan"
     assert row["met"] == "False"
 
