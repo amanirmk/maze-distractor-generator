@@ -1,5 +1,5 @@
 """Rebuild src/maze_distractors/data/often_capitalized.txt, the words held
-to their surprisal threshold capitalized as well as shown ("josh",
+to their surprisal threshold capitalized as well as shown ("grace",
 "oxford", "academy"): shown in lower case, a reader may still take one for
 the name, which the model, scoring the lower case, does not.
 

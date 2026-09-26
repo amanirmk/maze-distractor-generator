@@ -97,7 +97,8 @@ def generate_distractors(
         Path | None,
         typer.Option(
             dir_okay=False,
-            help="Also write each position's threshold and surprisal here.",
+            help="Also write a CSV of each position's frequencies, "
+            "threshold and surprisal here.",
         ),
     ] = None,
     model: Annotated[

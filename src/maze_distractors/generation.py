@@ -205,7 +205,7 @@ def _variant_keys(
     and has to meet the threshold both ways: the model can take a capitalized
     word for a name, which a reader who knows the word does not. A word
     that is often capitalized is scored capitalized too, whichever way it is
-    shown: a reader can take "josh" for the name, which the model, scoring
+    shown: a reader can take "grace" for the name, which the model, scoring
     the lower case, does not."""
     tokens = target_word.scored.context.token_ids
     shown = (tokens, case_of(target_word.word))

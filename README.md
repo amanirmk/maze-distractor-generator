@@ -62,13 +62,13 @@ output will also follow the A-Maze format.
 
 **Checking the result.** `--report FILE` writes a CSV with one row per word
 after the first (which gets no distractor): the target word's and the
-distractor's frequencies (per million words), the surprisal threshold the
-target word set, the distractor's surprisal, and whether it met the threshold. Positions that
-fell short are logged as warnings. If no word of the vocabulary could be tried
-at a position at all (possible with a small `--include` list), it shows
-`NO-DISTRACTOR` and issues a warning. Every run prints a JSON record to standard
-output—the model and its commit, the versions of the scoring libraries, the
-settings, and counts of positions short of their threshold or without a
+distractor's frequencies (per million words), the surprisal threshold the target
+word set, the distractor's surprisal, and whether it met the threshold.
+Positions that fell short are logged as warnings. If no word of the vocabulary
+could be tried at a position at all (possible with a small `--include` list), it
+shows `NO-DISTRACTOR` and issues a warning. Every run prints a JSON record to
+standard output—the model and its commit, the versions of the scoring libraries,
+the settings, and counts of positions short of their threshold or without a
 distractor.
 
 **Useful arguments:**
