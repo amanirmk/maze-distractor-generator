@@ -215,7 +215,7 @@ def test_an_output_at_a_word_list_path_is_refused(tmp_path):
     items.write_text(ITEMS)
     words = tmp_path / "words.txt"
     words.write_text("garden\n")
-    for option in ("--include", "--exclude"):
+    for option in ("--include", "--exclude", "--often-capitalized"):
         result = run(
             items, words, option, words, "--model", tmp_path / "none",
             exit_code=1,
